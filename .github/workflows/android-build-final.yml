@@ -1,8 +1,4 @@
-# FILE: .github/workflows/android-build-final.yml
-# PURPOSE: FINAL, DETERMINISTIC APK BUILD (NO DEBUGGING, NO FALLBACKS)
-# RESULT: ALWAYS PRODUCES A FINAL DEBUG APK IF BUILD SUCCEEDS
-
-name: Android Final APK Build (DroidForge)
+name: Android APK Build (FINAL – LICENSE SAFE)
 
 on:
   push:
@@ -18,124 +14,83 @@ jobs:
     timeout-minutes: 180
 
     steps:
-      # ------------------------------------------------------------
-      # SOURCE
-      # ------------------------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # PYTHON
-      # ------------------------------------------------------------
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: pip
 
-      # ------------------------------------------------------------
-      # SYSTEM TOOLCHAIN (LIBFFI / AUTOCONF FIX)
-      # ------------------------------------------------------------
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            openjdk-17-jdk \
-            unzip zip \
-            build-essential \
-            libffi-dev libssl-dev libsqlite3-dev \
-            zlib1g-dev libncurses-dev \
-            autoconf automake libtool autoconf-archive pkg-config
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          openjdk-17-jdk \
+          unzip zip \
+          build-essential \
+          libffi-dev libssl-dev libsqlite3-dev \
+          zlib1g-dev libncurses-dev \
+          autoconf automake libtool pkg-config
 
-      # ------------------------------------------------------------
-      # ANDROID ENVIRONMENT (HARD BOUND)
-      # ------------------------------------------------------------
-      - name: Export Android environment
-        run: |
-          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "$RUNNER_TEMP/android-sdk/platform-tools" >> $GITHUB_PATH
-          echo "$RUNNER_TEMP/android-sdk/build-tools/33.0.2" >> $GITHUB_PATH
+    - name: Define Android SDK paths
+      run: |
+        echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
+        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
 
-      # ------------------------------------------------------------
-      # ANDROID SDK + NDK (LOCKED, LICENSE-SAFE)
-      # ------------------------------------------------------------
-      - name: Install Android SDK and NDK
-        run: |
-          SDK="$ANDROID_SDK_ROOT"
-          TMP="$RUNNER_TEMP/cmdline"
+    - name: Install Android SDK + REQUIRED Build-Tools
+      run: |
+        SDK="$ANDROID_SDK_ROOT"
+        mkdir -p "$SDK"
+        cd "$SDK"
 
-          mkdir -p "$SDK" "$TMP"
-          cd "$TMP"
+        curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
+        unzip -q tools.zip
 
-          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
-          unzip -q tools.zip
+        mkdir -p cmdline-tools/latest
+        cp -r cmdline-tools/* cmdline-tools/latest/
 
-          mkdir -p "$SDK/cmdline-tools/latest"
-          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
+        yes | cmdline-tools/latest/bin/sdkmanager --licenses
 
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
+        cmdline-tools/latest/bin/sdkmanager \
+          "platform-tools" \
+          "platforms;android-34" \
+          "build-tools;36.1.0" \
+          "ndk;25.1.8937393"
 
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "ndk;25.1.8937393"
+        chmod +x "$SDK/build-tools/36.1.0/aidl"
 
-          chmod +x "$SDK/build-tools/33.0.2/aidl"
+    - name: Install Buildozer
+      run: |
+        python -m pip install --upgrade pip
+        pip install "cython<3.0" buildozer
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # ------------------------------------------------------------
-      # PYTHON TOOLING
-      # ------------------------------------------------------------
-      - name: Install Buildozer
-        run: |
-          python -m pip install --upgrade pip
-          pip install "cython<3.0" buildozer
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Validate environment
+      run: |
+        test -f buildozer.spec
+        test -f main.py
+        test -x "$ANDROID_SDK_ROOT/build-tools/36.1.0/aidl"
 
-      # ------------------------------------------------------------
-      # VALIDATION (FAIL FAST)
-      # ------------------------------------------------------------
-      - name: Validate inputs
-        run: |
-          test -f buildozer.spec
-          test -f main.py
-          test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl"
+    - name: Build APK
+      run: |
+        buildozer -v android debug
 
-      # ------------------------------------------------------------
-      # FINAL APK BUILD
-      # ------------------------------------------------------------
-      - name: Build Final APK
-        run: |
-          buildozer -v android debug
+    - name: Verify APK
+      run: |
+        ls -lah bin
+        test -f bin/*-debug.apk
 
-      # ------------------------------------------------------------
-      # VERIFY OUTPUT
-      # ------------------------------------------------------------
-      - name: Verify APK output
-        run: |
-          ls -lah bin
-          test -f bin/*-debug.apk
+    - name: Prepare release
+      run: |
+        mkdir -p release
+        cp bin/*-debug.apk release/
 
-      # ------------------------------------------------------------
-      # PREPARE RELEASE
-      # ------------------------------------------------------------
-      - name: Prepare release assets
-        run: |
-          mkdir -p release
-          cp bin/*-debug.apk release/
-
-      # ------------------------------------------------------------
-      # GITHUB RELEASE (FINAL APK)
-      # ------------------------------------------------------------
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: final-${{ github.run_number }}
-          name: DroidForge Final APK ${{ github.run_number }}
-          body: |
-            Final Android APK build generated by CI.
-            Commit: ${{ github.sha }}
-          files: |
-            release/*
+    - name: Publish Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: apk-${{ github.run_number }}
+        name: DroidForge APK ${{ github.run_number }}
+        files: release/*
