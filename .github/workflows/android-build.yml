@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # REQUIRED FOR RELEASES
+  contents: write
 
 jobs:
   build:
@@ -78,11 +78,16 @@ jobs:
         run: |
           buildozer -v android debug 2>&1 | tee build.log
 
+      - name: Verify APK output (HARD FAIL IF MISSING)
+        run: |
+          ls -lah bin || true
+          test -f bin/*.apk
+
       - name: Prepare release assets
         run: |
           mkdir -p release
           cp build.log release/
-          find . -name "*.apk" -exec cp {} release/ \;
+          cp bin/*.apk release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
