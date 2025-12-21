@@ -1,4 +1,4 @@
-name: Android APK Build (DroidForge)
+name: Android APK Build & Release (DroidForge)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # REQUIRED FOR RELEASES
 
 jobs:
   build:
@@ -23,7 +23,7 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install system dependencies (AUTOCONF FIX)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -41,13 +41,12 @@ jobs:
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "$RUNNER_TEMP/android-sdk/platform-tools" >> $GITHUB_PATH
 
-      - name: Install Android SDK (SAFE LAYOUT)
+      - name: Install Android SDK
         run: |
           SDK="$ANDROID_SDK_ROOT"
           TMP="$RUNNER_TEMP/cmdline"
 
-          mkdir -p "$SDK"
-          mkdir -p "$TMP"
+          mkdir -p "$SDK" "$TMP"
           cd "$TMP"
 
           curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
@@ -68,33 +67,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "cython<3.0" buildozer
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
-      - name: Validate repo (HARD FAIL IF INVALID)
+      - name: Validate repo
         run: |
           test -f buildozer.spec
           test -f main.py
-          buildozer --version
-          java -version
 
-      - name: Build APK (DEBUG)
+      - name: Build APK
         run: |
           buildozer -v android debug 2>&1 | tee build.log
 
-      - name: Collect artifacts
-        if: always()
+      - name: Prepare release assets
         run: |
-          mkdir -p artifacts
-          cp build.log artifacts/ || true
-          find . -type f -name "*.apk" -exec cp {} artifacts/ \; || true
+          mkdir -p release
+          cp build.log release/
+          find . -name "*.apk" -exec cp {} release/ \;
 
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: droidforge-build
-          path: artifacts
-          if-no-files-found: warn
+          tag_name: build-${{ github.run_number }}
+          name: DroidForge Build ${{ github.run_number }}
+          body: |
+            Automated Android build.
+            Commit: ${{ github.sha }}
+          files: |
+            release/*
