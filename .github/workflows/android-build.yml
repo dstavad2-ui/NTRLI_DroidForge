@@ -74,20 +74,20 @@ jobs:
           test -f buildozer.spec
           test -f main.py
 
-      - name: Build APK
+      - name: Build APK (FAIL HARD)
         run: |
-          buildozer -v android debug 2>&1 | tee build.log
+          buildozer -v android debug
 
-      - name: Verify APK output (HARD FAIL IF MISSING)
+      - name: Verify APK output
         run: |
-          ls -lah bin || true
-          test -f bin/*.apk
+          echo "=== BIN CONTENTS ==="
+          ls -lah bin
+          test -f bin/*-debug.apk
 
       - name: Prepare release assets
         run: |
           mkdir -p release
-          cp build.log release/
-          cp bin/*.apk release/
+          cp bin/*-debug.apk release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -95,7 +95,7 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: DroidForge Build ${{ github.run_number }}
           body: |
-            Automated Android build.
+            Automated Android debug build.
             Commit: ${{ github.sha }}
           files: |
             release/*
