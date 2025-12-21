@@ -1,12 +1,11 @@
 # .github/workflows/android-build.yml
+# FIXED STRICTLY ACCORDING TO YOUR LOGS – NO ASSUMPTIONS, NO FANTASY
 
-name: Android Build – DroidForge (FINAL)
+name: Android APK Build (DroidForge)
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -18,11 +17,9 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -35,24 +32,26 @@ jobs:
             unzip zip \
             build-essential \
             libffi-dev libssl-dev libsqlite3-dev \
-            zlib1g-dev libncurses5-dev
+            zlib1g-dev libncurses-dev
 
-      - name: Export Android paths
+      - name: Export Android environment
         run: |
           echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
-          echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
 
-      - name: Install Android SDK + NDK (p4a compatible)
+      - name: Install Android SDK (FIXED cmdline-tools layout)
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT"
 
           curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip
+
+          mv cmdline-tools cmdline-tools-tmp
           mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/
-          rm cmdline.zip
+          mv cmdline-tools-tmp/* cmdline-tools/latest/
+          rm -rf cmdline-tools-tmp cmdline.zip
 
           yes | cmdline-tools/latest/bin/sdkmanager --licenses
 
@@ -62,27 +61,31 @@ jobs:
             "build-tools;33.0.2" \
             "ndk;25.1.8937393"
 
-      - name: Install Python dependencies
+      - name: Install Python dependencies (repo-driven)
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Build APK (verbose)
+      - name: Validate repo structure
         run: |
-          buildozer android debug --verbose
+          ls -la
+          test -f buildozer.spec
+
+      - name: Build APK using repo code ONLY
+        run: |
+          buildozer android debug
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p artifacts
-          cp -r bin artifacts/ || true
-          cp -r .buildozer artifacts/ || true
+          find . -maxdepth 2 -type d -name "bin" -exec cp -r {} artifacts/ \; || true
+          find . -maxdepth 2 -type d -name ".buildozer" -exec cp -r {} artifacts/ \; || true
 
-      - name: Upload artifacts
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: droidforge-build
           path: artifacts
-          retention-days: 7
+          if-no-files-found: warn
