@@ -1,4 +1,40 @@
-- name: Configure Android SDK paths (FINAL)
+name: Android APK Build (ABSOLUTE FINAL)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: pip
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          openjdk-17-jdk \
+          unzip zip \
+          build-essential \
+          libffi-dev libssl-dev libsqlite3-dev \
+          zlib1g-dev libncurses-dev \
+          autoconf automake libtool pkg-config
+
+    - name: Configure Android SDK paths
       run: |
         SDK_ROOT="$RUNNER_TEMP/android-sdk"
         echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
@@ -6,7 +42,7 @@
         echo "BUILDOZER_ANDROID_SDK=$SDK_ROOT" >> $GITHUB_ENV
         echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
 
-    - name: Install Android SDK (NO SELF-COPY, FINAL)
+    - name: Install Android SDK (RECURSION SAFE)
       run: |
         SDK="$ANDROID_SDK_ROOT"
         mkdir -p "$SDK"
@@ -16,8 +52,16 @@
         unzip -q tools.zip
         rm tools.zip
 
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/
+        # Normalize cmdline-tools layout safely
+        if [ -d "cmdline-tools/latest" ]; then
+          echo "cmdline-tools/latest already exists — OK"
+        else
+          mkdir -p cmdline-tools/latest
+          for d in cmdline-tools/*; do
+            [ "$(basename "$d")" = "latest" ] && continue
+            mv "$d" cmdline-tools/latest/
+          done
+        fi
 
         yes | cmdline-tools/latest/bin/sdkmanager --licenses
 
@@ -26,3 +70,39 @@
           "platforms;android-33" \
           "build-tools;33.0.2" \
           "ndk;25.1.8937393"
+
+    - name: Install Buildozer
+      run: |
+        python -m pip install --upgrade pip
+        pip install "cython<3.0" buildozer
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Validate inputs
+      run: |
+        test -f buildozer.spec
+        test -f main.py
+
+    - name: Build APK
+      run: |
+        buildozer -v android debug
+
+    - name: Verify APK output
+      run: |
+        ls -lah bin
+        test -f bin/*-debug.apk
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release
+        cp bin/*-debug.apk release/
+
+    - name: Publish GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: apk-${{ github.run_number }}
+        name: DroidForge APK ${{ github.run_number }}
+        body: |
+          Automated Android APK build.
+          Commit: ${{ github.sha }}
+        files: |
+          release/*
