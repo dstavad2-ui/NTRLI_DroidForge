@@ -25,7 +25,10 @@ warn_on_root = 1
 
 [app:android]
 
-# ===== HARD LOCKS (THIS FIXES YOUR ERROR) =====
+# ===== FORCE BUILDOZER TO USE CI SDK (CRITICAL FIX) =====
+android.sdk_path = /home/runner/work/_temp/android-sdk
+android.ndk_path = /home/runner/work/_temp/android-sdk/ndk/25.1.8937393
+
 android.api = 33
 android.minapi = 21
 android.build_tools_version = 33.0.2
