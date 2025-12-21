@@ -1,0 +1,7 @@
+unzip droidforge-console-v1.0.0.zip
+cd droidforge
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/droidforge.git
+git push -u origin main
