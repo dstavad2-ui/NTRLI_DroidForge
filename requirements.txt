@@ -1,0 +1,31 @@
+# DroidForge Console - Python Dependencies
+# ==========================================
+
+# Core Framework
+kivy==2.3.0
+kivymd==1.2.0
+
+# Image Processing
+Pillow>=10.0.0
+
+# HTTP/Network
+requests>=2.31.0
+certifi>=2023.7.22
+charset-normalizer>=3.2.0
+idna>=3.4
+urllib3>=2.0.4
+
+# Configuration
+pyyaml>=6.0.1
+
+# Development/Build
+buildozer>=1.5.0
+cython>=3.0.0
+
+# Testing (dev only)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Linting (dev only)  
+flake8>=6.1.0
+black>=23.7.0
