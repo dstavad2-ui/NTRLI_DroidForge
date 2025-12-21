@@ -1,7 +1,3 @@
-# .github/workflows/android-build.yml
-# HARD FIX – BASED ON YOUR ACTUAL FAILURES
-# NO PLACEHOLDERS. NO CONDITIONAL MAGIC. NO GUESSWORK.
-
 name: Android APK Build (DroidForge)
 
 on:
@@ -15,17 +11,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - name: Install system dependencies
+      - name: Install system dependencies (AUTOCONF FIX)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -33,37 +31,40 @@ jobs:
             unzip zip \
             build-essential \
             libffi-dev libssl-dev libsqlite3-dev \
-            zlib1g-dev libncurses-dev
+            zlib1g-dev libncurses-dev \
+            autoconf automake libtool autoconf-archive pkg-config
 
-      - name: Export Android + Java environment
+      - name: Export Android environment
         run: |
           echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "$RUNNER_TEMP/android-sdk/platform-tools" >> $GITHUB_PATH
-          echo "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Install Android SDK (STRICT LAYOUT – NO mv LOOP)
+      - name: Install Android SDK (SAFE LAYOUT)
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT"
-          cd "$ANDROID_SDK_ROOT"
+          SDK="$ANDROID_SDK_ROOT"
+          TMP="$RUNNER_TEMP/cmdline"
 
-          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
-          unzip -q cmdline.zip
+          mkdir -p "$SDK"
+          mkdir -p "$TMP"
+          cd "$TMP"
 
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/
-          rm -f cmdline.zip
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
+          unzip -q tools.zip
 
-          yes | cmdline-tools/latest/bin/sdkmanager --licenses
+          mkdir -p "$SDK/cmdline-tools/latest"
+          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
 
-          cmdline-tools/latest/bin/sdkmanager \
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
+
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "ndk;25.1.8937393"
 
-      - name: Install Python tooling (Buildozer-SAFE)
+      - name: Install Python tooling
         run: |
           python -m pip install --upgrade pip
           pip install "cython<3.0" buildozer
@@ -72,26 +73,27 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Hard validation (FAIL FAST)
+      - name: Validate repo (HARD FAIL IF INVALID)
         run: |
           test -f buildozer.spec
-          python --version
-          java -version
+          test -f main.py
           buildozer --version
+          java -version
 
-      - name: Build APK (repo code ONLY)
+      - name: Build APK (DEBUG)
         run: |
-          buildozer -v android debug
+          buildozer -v android debug 2>&1 | tee build.log
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p artifacts
-          find . -type d -name "bin" -exec cp -r {} artifacts/ \; || true
-          find . -type d -name ".buildozer" -exec cp -r {} artifacts/ \; || true
+          cp build.log artifacts/ || true
+          find . -type f -name "*.apk" -exec cp {} artifacts/ \; || true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifacts
         if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: droidforge-build
           path: artifacts
