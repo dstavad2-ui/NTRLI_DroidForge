@@ -14,11 +14,9 @@ jobs:
     timeout-minutes: 180
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -41,7 +39,7 @@ jobs:
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "$RUNNER_TEMP/android-sdk/platform-tools" >> $GITHUB_PATH
 
-      - name: Install Android SDK
+      - name: Install Android SDK (LOCKED)
         run: |
           SDK="$ANDROID_SDK_ROOT"
           TMP="$RUNNER_TEMP/cmdline"
@@ -69,22 +67,21 @@ jobs:
           pip install "cython<3.0" buildozer
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Validate repo
+      - name: Validate inputs
         run: |
           test -f buildozer.spec
           test -f main.py
 
-      - name: Build APK (FAIL HARD)
+      - name: Build APK (LICENSE-SAFE)
         run: |
           buildozer -v android debug
 
-      - name: Verify APK output
+      - name: Verify APK
         run: |
-          echo "=== BIN CONTENTS ==="
           ls -lah bin
           test -f bin/*-debug.apk
 
-      - name: Prepare release assets
+      - name: Prepare release
         run: |
           mkdir -p release
           cp bin/*-debug.apk release/
@@ -95,7 +92,7 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: DroidForge Build ${{ github.run_number }}
           body: |
-            Automated Android debug build.
+            Automated Android debug build
             Commit: ${{ github.sha }}
           files: |
             release/*
