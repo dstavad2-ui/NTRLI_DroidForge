@@ -1,4 +1,6 @@
-name: Android Build – DroidForge (Fixed v2)
+# .github/workflows/android-build.yml
+
+name: Android Build – DroidForge (FINAL)
 
 on:
   push:
@@ -13,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -30,39 +32,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             openjdk-17-jdk \
-            unzip \
-            zip \
+            unzip zip \
             build-essential \
-            libffi-dev \
-            libssl-dev \
-            libsqlite3-dev \
-            zlib1g-dev \
-            libncurses5-dev
+            libffi-dev libssl-dev libsqlite3-dev \
+            zlib1g-dev libncurses5-dev
 
-      - name: Define Android SDK paths
+      - name: Export Android paths
         run: |
           echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
 
-      - name: Install Android SDK tools
+      - name: Install Android SDK + NDK (p4a compatible)
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          mkdir -p "$ANDROID_SDK_ROOT"
+          cd "$ANDROID_SDK_ROOT"
+
           curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
-          unzip -q cmdline.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          unzip -q cmdline.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/
           rm cmdline.zip
 
-      - name: Accept Android SDK licenses (non-interactive)
-        run: |
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
+          yes | cmdline-tools/latest/bin/sdkmanager --licenses
 
-      - name: Install required Android SDK components
-        run: |
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+          cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;33.0.2"
+            "build-tools;33.0.2" \
+            "ndk;25.1.8937393"
 
       - name: Install Python dependencies
         run: |
