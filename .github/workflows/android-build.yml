@@ -1,5 +1,6 @@
 # .github/workflows/android-build.yml
-# FIXED STRICTLY ACCORDING TO YOUR LOGS – NO ASSUMPTIONS, NO FANTASY
+# HARD FIX – BASED ON YOUR ACTUAL FAILURES
+# NO PLACEHOLDERS. NO CONDITIONAL MAGIC. NO GUESSWORK.
 
 name: Android APK Build (DroidForge)
 
@@ -34,24 +35,25 @@ jobs:
             libffi-dev libssl-dev libsqlite3-dev \
             zlib1g-dev libncurses-dev
 
-      - name: Export Android environment
+      - name: Export Android + Java environment
         run: |
           echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "$RUNNER_TEMP/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Install Android SDK (FIXED cmdline-tools layout)
+      - name: Install Android SDK (STRICT LAYOUT – NO mv LOOP)
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          mkdir -p "$ANDROID_SDK_ROOT"
           cd "$ANDROID_SDK_ROOT"
 
           curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip
 
-          mv cmdline-tools cmdline-tools-tmp
           mkdir -p cmdline-tools/latest
-          mv cmdline-tools-tmp/* cmdline-tools/latest/
-          rm -rf cmdline-tools-tmp cmdline.zip
+          mv cmdline-tools/* cmdline-tools/latest/
+          rm -f cmdline.zip
 
           yes | cmdline-tools/latest/bin/sdkmanager --licenses
 
@@ -61,27 +63,32 @@ jobs:
             "build-tools;33.0.2" \
             "ndk;25.1.8937393"
 
-      - name: Install Python dependencies (repo-driven)
+      - name: Install Python tooling (Buildozer-SAFE)
         run: |
           python -m pip install --upgrade pip
-          pip install buildozer cython
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install "cython<3.0" buildozer
 
-      - name: Validate repo structure
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Hard validation (FAIL FAST)
         run: |
-          ls -la
           test -f buildozer.spec
+          python --version
+          java -version
+          buildozer --version
 
-      - name: Build APK using repo code ONLY
+      - name: Build APK (repo code ONLY)
         run: |
-          buildozer android debug
+          buildozer -v android debug
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p artifacts
-          find . -maxdepth 2 -type d -name "bin" -exec cp -r {} artifacts/ \; || true
-          find . -maxdepth 2 -type d -name ".buildozer" -exec cp -r {} artifacts/ \; || true
+          find . -type d -name "bin" -exec cp -r {} artifacts/ \; || true
+          find . -type d -name ".buildozer" -exec cp -r {} artifacts/ \; || true
 
       - uses: actions/upload-artifact@v4
         if: always()
