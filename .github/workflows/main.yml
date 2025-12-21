@@ -1,4 +1,4 @@
-unzip droidforge-console-v1.0.0.zip
+
 cd droidforge
 git init
 git add .
