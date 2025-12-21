@@ -14,8 +14,6 @@ requirements = python3,kivy==2.3.0,kivymd==1.2.0,pillow,requests,pyyaml,certifi,
 orientation = portrait
 fullscreen = 1
 
-icon.filename = %(source.dir)s/icon.png
-
 entrypoint = main.py
 
 
@@ -27,21 +25,17 @@ warn_on_root = 1
 
 [app:android]
 
-# CRITICAL FIX — android.api (NOT android.sdk)
+# ===== HARD LOCKS (THIS FIXES YOUR ERROR) =====
 android.api = 33
 android.minapi = 21
+android.build_tools_version = 33.0.2
 android.ndk = 25b
+
 android.arch = arm64-v8a, armeabi-v7a
 
 android.permissions = INTERNET
 
-android.allow_backup = True
-
-android.gradle_dependencies = \
-    androidx.appcompat:appcompat:1.6.1
-
-android.enable_androidx = True
-
 android.accept_sdk_license = True
-
+android.skip_update = True
+android.enable_androidx = True
 android.debug = True
