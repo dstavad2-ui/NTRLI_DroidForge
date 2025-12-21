@@ -1,4 +1,4 @@
-name: Android Build – DroidForge
+name: Android Build – DroidForge (Fixed)
 
 on:
   push:
@@ -10,38 +10,58 @@ on:
 permissions:
   contents: read
 
+env:
+  ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+  ANDROID_HOME: ${{ runner.temp }}/android-sdk
+  JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+
 jobs:
-  validate-and-build:
-    name: Validate Repo and Build APK
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          cache: pip
 
-      - name: System dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             openjdk-17-jdk \
-            zip \
             unzip \
+            zip \
             build-essential \
             libffi-dev \
             libssl-dev \
             libsqlite3-dev \
             zlib1g-dev \
-            libncurses5-dev \
-            libbz2-dev \
-            libreadline-dev \
-            liblzma-dev
+            libncurses5-dev
+
+      - name: Install Android SDK tools
+        run: |
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
+          unzip -q cmdline.zip -d $ANDROID_SDK_ROOT/cmdline-tools
+          mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          rm cmdline.zip
+
+      - name: Accept Android SDK licenses (NON-INTERACTIVE)
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      - name: Install required Android SDK components
+        run: |
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
 
       - name: Install Python dependencies
         run: |
@@ -49,42 +69,21 @@ jobs:
           pip install buildozer cython
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Static repo sanity check
+      - name: Build APK (verbose)
         run: |
-          echo "Listing repository structure"
-          find . -maxdepth 3 -type f
-          echo "Checking for buildozer.spec"
-          test -f buildozer.spec
+          buildozer android debug --verbose
 
-      - name: Pre-build validation
-        run: |
-          python - <<'EOF'
-          import sys, os
-          required = ["main.py"]
-          missing = [f for f in required if not os.path.exists(f)]
-          if missing:
-              print("Missing critical files:", missing)
-              sys.exit(1)
-          print("Pre-build validation passed")
-          EOF
-
-      - name: Build Android APK (debug)
-        env:
-          ANDROIDSDK: ${{ runner.temp }}/android-sdk
-        run: |
-          buildozer android debug || echo "Build exited non-zero; continuing for log capture"
-
-      - name: Collect build outputs
+      - name: Collect artifacts
         if: always()
         run: |
           mkdir -p artifacts
-          if [ -d bin ]; then cp -r bin artifacts/; fi
-          if [ -d .buildozer ]; then cp -r .buildozer artifacts/; fi
+          cp -r bin artifacts/ || true
+          cp -r .buildozer artifacts/ || true
 
-      - name: Upload build artifacts
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: droidforge-build-output
+          name: droidforge-build
           path: artifacts
           retention-days: 7
