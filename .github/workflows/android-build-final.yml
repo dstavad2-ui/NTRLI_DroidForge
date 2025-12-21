@@ -1,108 +1,95 @@
-name: Android APK Build (ABSOLUTE FINAL)
+name: Build Android APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
+  build-android:
+    runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      # ------------------------------------------------------------------
+      # 1. CHECKOUT
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-        cache: pip
+      # ------------------------------------------------------------------
+      # 2. ANDROID SDK — EXPLICIT, NON-INTERACTIVE, COMPLETE
+      # ------------------------------------------------------------------
+      - name: Set Android SDK environment
+        run: |
+          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "/usr/lib/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/lib/android-sdk/platform-tools" >> $GITHUB_PATH
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          openjdk-17-jdk \
-          unzip zip \
-          build-essential \
-          libffi-dev libssl-dev libsqlite3-dev \
-          zlib1g-dev libncurses-dev \
-          autoconf automake libtool pkg-config
+      - name: Install Android SDK command-line tools
+        run: |
+          sudo mkdir -p /usr/lib/android-sdk/cmdline-tools
+          cd /usr/lib/android-sdk/cmdline-tools
+          sudo wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          sudo unzip commandlinetools-linux-11076708_latest.zip
+          sudo mv cmdline-tools latest
 
-    - name: Configure Android SDK paths
-      run: |
-        SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
-        echo "BUILDOZER_ANDROID_SDK=$SDK_ROOT" >> $GITHUB_ENV
-        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+      - name: Accept Android SDK licenses
+        run: |
+          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    - name: Install Android SDK (RECURSION SAFE)
-      run: |
-        SDK="$ANDROID_SDK_ROOT"
-        mkdir -p "$SDK"
-        cd "$SDK"
+      - name: Install required Android SDK packages
+        run: |
+          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;36.1.0"
 
-        curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
-        unzip -q tools.zip
-        rm tools.zip
+      - name: Verify build-tools and aidl
+        run: |
+          ls -lah /usr/lib/android-sdk/build-tools/36.1.0
+          ls -lah /usr/lib/android-sdk/build-tools/36.1.0/aidl
 
-        # Normalize cmdline-tools layout safely
-        if [ -d "cmdline-tools/latest" ]; then
-          echo "cmdline-tools/latest already exists — OK"
-        else
-          mkdir -p cmdline-tools/latest
-          for d in cmdline-tools/*; do
-            [ "$(basename "$d")" = "latest" ] && continue
-            mv "$d" cmdline-tools/latest/
-          done
-        fi
+      # ------------------------------------------------------------------
+      # 3. PYTHON
+      # ------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-        yes | cmdline-tools/latest/bin/sdkmanager --licenses
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer cython virtualenv
 
-        cmdline-tools/latest/bin/sdkmanager \
-          "platform-tools" \
-          "platforms;android-33" \
-          "build-tools;33.0.2" \
-          "ndk;25.1.8937393"
+      # ------------------------------------------------------------------
+      # 4. SYSTEM DEPENDENCIES REQUIRED BY BUILDOZER
+      # ------------------------------------------------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk \
+            unzip \
+            zip \
+            libncurses5 \
+            libstdc++6 \
+            zlib1g
 
-    - name: Install Buildozer
-      run: |
-        python -m pip install --upgrade pip
-        pip install "cython<3.0" buildozer
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      # ------------------------------------------------------------------
+      # 5. BUILD APK
+      # ------------------------------------------------------------------
+      - name: Build APK with Buildozer
+        run: |
+          buildozer android release
 
-    - name: Validate inputs
-      run: |
-        test -f buildozer.spec
-        test -f main.py
-
-    - name: Build APK
-      run: |
-        buildozer -v android debug
-
-    - name: Verify APK output
-      run: |
-        ls -lah bin
-        test -f bin/*-debug.apk
-
-    - name: Prepare release assets
-      run: |
-        mkdir -p release
-        cp bin/*-debug.apk release/
-
-    - name: Publish GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: apk-${{ github.run_number }}
-        name: DroidForge APK ${{ github.run_number }}
-        body: |
-          Automated Android APK build.
-          Commit: ${{ github.sha }}
-        files: |
-          release/*
+      # ------------------------------------------------------------------
+      # 6. VERIFY OUTPUT
+      # ------------------------------------------------------------------
+      - name: Verify APK output
+        run: |
+          ls -lah bin || true
+          test -f bin/*.apk
