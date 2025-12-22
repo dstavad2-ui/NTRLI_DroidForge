@@ -35,6 +35,17 @@ jobs:
       with:
         fetch-depth: 0
         
+    - name: Check for Android project
+      id: check_project
+      run: |
+        if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "✅ Android project found"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "⚠️  No Android project detected"
+        fi
+        
     - name: Set up JDK ${{ env.JAVA_VERSION }}
       uses: actions/setup-java@v4
       with:
@@ -44,12 +55,127 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
+    - name: Initialize Android project structure
+      if: steps.check_project.outputs.exists == 'false'
+      run: |
+        echo "🚀 Initializing Android project structure..."
+        
+        # Create directories
+        mkdir -p app/src/main/java/com/ntrli/droidforge
+        mkdir -p app/src/main/res/{layout,values,drawable,mipmap-{h,m,xh,xxh,xxxh}dpi}
+        
+        # Create settings.gradle.kts
+        cat > settings.gradle.kts << 'SETTINGS'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "NTRLI_DroidForge"
+        include(":app")
+        SETTINGS
+        
+        # Create root build.gradle.kts
+        cat > build.gradle.kts << 'BUILD'
+        plugins {
+            id("com.android.application") version "8.2.0" apply false
+            id("org.jetbrains.kotlin.android") version "1.9.20" apply false
+        }
+        BUILD
+        
+        # Create app/build.gradle.kts
+        cat > app/build.gradle.kts << 'APPBUILD'
+        plugins {
+            id("com.android.application")
+            id("org.jetbrains.kotlin.android")
+        }
+        android {
+            namespace = "com.ntrli.droidforge"
+            compileSdk = 34
+            defaultConfig {
+                applicationId = "com.ntrli.droidforge"
+                minSdk = 24
+                targetSdk = 34
+                versionCode = 1
+                versionName = "1.0.0"
+            }
+            buildTypes {
+                release {
+                    isMinifyEnabled = false
+                }
+            }
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+        dependencies {
+            implementation("androidx.core:core-ktx:1.12.0")
+            implementation("androidx.appcompat:appcompat:1.6.1")
+            implementation("com.google.android.material:material:1.11.0")
+        }
+        APPBUILD
+        
+        # Create AndroidManifest.xml
+        cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application
+                android:allowBackup="true"
+                android:icon="@mipmap/ic_launcher"
+                android:label="NTRLI DroidForge"
+                android:theme="@style/Theme.AppCompat.Light">
+                <activity
+                    android:name=".MainActivity"
+                    android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        MANIFEST
+        
+        # Create MainActivity.kt
+        cat > app/src/main/java/com/ntrli/droidforge/MainActivity.kt << 'MAIN'
+        package com.ntrli.droidforge
+        import androidx.appcompat.app.AppCompatActivity
+        import android.os.Bundle
+        class MainActivity : AppCompatActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+            }
+        }
+        MAIN
+        
+        # Create gradle.properties
+        cat > gradle.properties << 'PROPS'
+        org.gradle.jvmargs=-Xmx2048m
+        android.useAndroidX=true
+        kotlin.code.style=official
+        PROPS
+        
+        echo "✅ Android project structure initialized"
+        
     - name: Install Gradle wrapper
       run: |
         echo "🔧 Installing Gradle wrapper..."
         gradle wrapper --gradle-version 8.5 --distribution-type all
         chmod +x gradlew
-        echo "✅ Gradle wrapper installed successfully"
+        echo "✅ Gradle wrapper installed"
         ./gradlew --version
       
     - name: Cache Gradle dependencies
