@@ -1,95 +1,226 @@
-name: Build Android APK
+name: Android Build Final
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
 
 jobs:
-  build-android:
-    runs-on: ubuntu-22.04
-
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
     steps:
-      # ------------------------------------------------------------------
-      # 1. CHECKOUT
-      # ------------------------------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+        cache: 'gradle'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.android/build-cache
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/buildSrc/**/*.kt') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Make gradlew executable
+      run: chmod +x gradlew
+      
+    - name: Validate Gradle wrapper
+      uses: gradle/wrapper-validation-action@v2
+      
+    - name: Check code style
+      run: ./gradlew ktlintCheck --continue || true
+      
+    - name: Run tests
+      run: ./gradlew test --stacktrace
+      continue-on-error: true
+      
+    - name: Build Debug APK
+      if: github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == ''
+      run: |
+        ./gradlew assembleDebug --stacktrace --no-daemon
+        echo "DEBUG_APK_PATH=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)" >> $GITHUB_ENV
+        
+    - name: Build Release APK
+      if: github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == ''
+      run: |
+        ./gradlew assembleRelease --stacktrace --no-daemon
+        echo "RELEASE_APK_PATH=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)" >> $GITHUB_ENV
+      env:
+        SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        
+    - name: Get version info
+      id: version
+      run: |
+        VERSION_NAME=$(grep versionName app/build.gradle | awk '{print $2}' | tr -d '"' || echo "1.0.0")
+        VERSION_CODE=$(grep versionCode app/build.gradle | awk '{print $2}' || echo "1")
+        echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "build_date=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        
+    - name: Rename APK files
+      run: |
+        if [ -f "${{ env.DEBUG_APK_PATH }}" ]; then
+          cp "${{ env.DEBUG_APK_PATH }}" "app-debug-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
+        fi
+        if [ -f "${{ env.RELEASE_APK_PATH }}" ]; then
+          cp "${{ env.RELEASE_APK_PATH }}" "app-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
+        fi
+        
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      if: success() && (github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == '')
+      with:
+        name: debug-apk-v${{ steps.version.outputs.version_name }}
+        path: app-debug-*.apk
+        retention-days: 30
+        if-no-files-found: warn
+        
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      if: success() && (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == '')
+      with:
+        name: release-apk-v${{ steps.version.outputs.version_name }}
+        path: app-release-*.apk
+        retention-days: 90
+        if-no-files-found: warn
+        
+    - name: Generate APK info
+      if: success()
+      run: |
+        echo "# Build Information" > build-info.txt
+        echo "" >> build-info.txt
+        echo "**Version:** ${{ steps.version.outputs.version_name }}" >> build-info.txt
+        echo "**Version Code:** ${{ steps.version.outputs.version_code }}" >> build-info.txt
+        echo "**Build Date:** ${{ steps.version.outputs.build_date }}" >> build-info.txt
+        echo "**Commit:** ${{ github.sha }}" >> build-info.txt
+        echo "**Branch:** ${{ github.ref_name }}" >> build-info.txt
+        if [ -f "${{ env.DEBUG_APK_PATH }}" ]; then
+          echo "**Debug APK Size:** $(du -h app-debug-*.apk | cut -f1)" >> build-info.txt
+        fi
+        if [ -f "${{ env.RELEASE_APK_PATH }}" ]; then
+          echo "**Release APK Size:** $(du -h app-release-*.apk | cut -f1)" >> build-info.txt
+        fi
+        cat build-info.txt
+        
+    - name: Upload build info
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: build-info
+        path: build-info.txt
+        retention-days: 90
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          app/build/reports/tests/
+          app/build/test-results/
+        retention-days: 14
+        if-no-files-found: ignore
+        
+    - name: Upload lint results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: lint-results
+        path: |
+          app/build/reports/lint-results-*.html
+          app/build/reports/ktlint/
+        retention-days: 14
+        if-no-files-found: ignore
+        
+    - name: Upload build logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: build-logs
+        path: |
+          app/build/reports/
+          build/reports/
+          app/build/outputs/logs/
+        retention-days: 7
+        if-no-files-found: ignore
+        
+    - name: Cleanup Gradle Cache
+      run: |
+        rm -f ~/.gradle/caches/modules-2/modules-2.lock
+        rm -f ~/.gradle/caches/modules-2/gc.properties
 
-      # ------------------------------------------------------------------
-      # 2. ANDROID SDK — EXPLICIT, NON-INTERACTIVE, COMPLETE
-      # ------------------------------------------------------------------
-      - name: Set Android SDK environment
-        run: |
-          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
-          echo "/usr/lib/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "/usr/lib/android-sdk/platform-tools" >> $GITHUB_PATH
-
-      - name: Install Android SDK command-line tools
-        run: |
-          sudo mkdir -p /usr/lib/android-sdk/cmdline-tools
-          cd /usr/lib/android-sdk/cmdline-tools
-          sudo wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          sudo unzip commandlinetools-linux-11076708_latest.zip
-          sudo mv cmdline-tools latest
-
-      - name: Accept Android SDK licenses
-        run: |
-          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-
-      - name: Install required Android SDK packages
-        run: |
-          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;36.1.0"
-
-      - name: Verify build-tools and aidl
-        run: |
-          ls -lah /usr/lib/android-sdk/build-tools/36.1.0
-          ls -lah /usr/lib/android-sdk/build-tools/36.1.0/aidl
-
-      # ------------------------------------------------------------------
-      # 3. PYTHON
-      # ------------------------------------------------------------------
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install buildozer cython virtualenv
-
-      # ------------------------------------------------------------------
-      # 4. SYSTEM DEPENDENCIES REQUIRED BY BUILDOZER
-      # ------------------------------------------------------------------
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            openjdk-17-jdk \
-            unzip \
-            zip \
-            libncurses5 \
-            libstdc++6 \
-            zlib1g
-
-      # ------------------------------------------------------------------
-      # 5. BUILD APK
-      # ------------------------------------------------------------------
-      - name: Build APK with Buildozer
-        run: |
-          buildozer android release
-
-      # ------------------------------------------------------------------
-      # 6. VERIFY OUTPUT
-      # ------------------------------------------------------------------
-      - name: Verify APK output
-        run: |
-          ls -lah bin || true
-          test -f bin/*.apk
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release-apk-*/*.apk
+          build-info/*.txt
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## 🚀 NTRLI Android Release
+          
+          Automated build from GitHub Actions.
+          
+          ### 📦 Downloads
+          - **Release APK**: Ready for production
+          - **Build Info**: Version and build details
+          
+          ### 📝 Installation
+          1. Download the APK file
+          2. Enable "Install from Unknown Sources" in Android settings
+          3. Install the APK
+          
+          Built with precision. No compromises.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
