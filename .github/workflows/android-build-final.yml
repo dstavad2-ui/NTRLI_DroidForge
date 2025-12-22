@@ -53,12 +53,27 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # ✅ CRITICAL FIX — ANDROIDX ENABLEMENT
+      - name: Ensure gradle.properties (AndroidX)
+        run: |
+          if [ ! -f gradle.properties ]; then
+            cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          EOF
+          else
+            grep -q "android.useAndroidX" gradle.properties || echo "android.useAndroidX=true" >> gradle.properties
+            grep -q "android.enableJetifier" gradle.properties || echo "android.enableJetifier=true" >> gradle.properties
+          fi
+
       - name: Initialize Android project (if missing)
         if: steps.detect.outputs.android == 'false'
         run: |
           mkdir -p app/src/main/java/com/ntrli/droidforge
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/mipmap-hdpi
 
           cat > settings.gradle.kts << 'EOF'
           pluginManagement {
@@ -199,25 +214,3 @@ jobs:
           name: android-apks
           path: artifacts/*.apk
           retention-days: 30
-
-  release:
-    name: GitHub Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download APK artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-apks
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: "*.apk"
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
