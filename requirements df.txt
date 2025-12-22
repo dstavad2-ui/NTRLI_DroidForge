@@ -1,0 +1,13 @@
+# DroidForge AI Copilot Dependencies
+# Python 3.11+
+
+# GitHub API
+PyGithub==2.1.1
+
+# AI Providers
+openai==1.54.0
+groq==0.4.2
+mistralai==0.4.2
+
+# Utilities
+requests==2.31.0
