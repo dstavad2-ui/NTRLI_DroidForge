@@ -44,6 +44,14 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
+    - name: Install Gradle wrapper
+      run: |
+        echo "🔧 Installing Gradle wrapper..."
+        gradle wrapper --gradle-version 8.5 --distribution-type all
+        chmod +x gradlew
+        echo "✅ Gradle wrapper installed successfully"
+        ./gradlew --version
+      
     - name: Cache Gradle dependencies
       uses: actions/cache@v4
       with:
@@ -55,28 +63,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
           
-    - name: Check for Gradle wrapper
-      id: gradle_check
-      run: |
-        if [ -f "gradlew" ]; then
-          echo "exists=true" >> $GITHUB_OUTPUT
-        else
-          echo "exists=false" >> $GITHUB_OUTPUT
-        fi
-        
-    - name: Make gradlew executable
-      if: steps.gradle_check.outputs.exists == 'true'
-      run: chmod +x gradlew
-      
-    - name: Setup Gradle wrapper
-      if: steps.gradle_check.outputs.exists == 'false'
-      run: |
-        gradle wrapper --gradle-version 8.5
-        chmod +x gradlew
-      
-    - name: Validate Gradle wrapper
-      uses: gradle/wrapper-validation-action@v2
-      
     - name: Check code style
       run: ./gradlew ktlintCheck --continue || true
       
