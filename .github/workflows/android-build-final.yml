@@ -87,8 +87,8 @@ jobs:
         # Create root build.gradle.kts
         cat > build.gradle.kts << 'BUILD'
         plugins {
-            id("com.android.application") version "8.2.0" apply false
-            id("org.jetbrains.kotlin.android") version "1.9.20" apply false
+            id("com.android.application") version "8.5.2" apply false
+            id("org.jetbrains.kotlin.android") version "2.0.0" apply false
         }
         BUILD
         
@@ -173,7 +173,7 @@ jobs:
     - name: Install Gradle wrapper
       run: |
         echo "🔧 Installing Gradle wrapper..."
-        gradle wrapper --gradle-version 8.5 --distribution-type all
+        gradle wrapper --gradle-version 8.9 --distribution-type all
         chmod +x gradlew
         echo "✅ Gradle wrapper installed"
         ./gradlew --version
