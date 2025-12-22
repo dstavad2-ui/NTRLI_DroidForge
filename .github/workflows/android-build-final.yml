@@ -12,7 +12,7 @@ on:
       build_type:
         description: 'Build type'
         required: true
-        default: 'debug'
+        default: 'both'
         type: choice
         options:
           - debug
@@ -21,13 +21,13 @@ on:
 
 env:
   JAVA_VERSION: '17'
-  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dkotlin.incremental=false
 
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     
     steps:
     - name: Checkout code
@@ -69,7 +69,13 @@ jobs:
         cat > settings.gradle.kts << 'SETTINGS'
         pluginManagement {
             repositories {
-                google()
+                google {
+                    content {
+                        includeGroupByRegex("com\\.android.*")
+                        includeGroupByRegex("com\\.google.*")
+                        includeGroupByRegex("androidx.*")
+                    }
+                }
                 mavenCentral()
                 gradlePluginPortal()
             }
@@ -85,11 +91,15 @@ jobs:
         include(":app")
         SETTINGS
         
-        # Create root build.gradle.kts with PRIMARY version
+        # Create root build.gradle.kts - LATEST VERSIONS
         cat > build.gradle.kts << 'BUILD'
         plugins {
-            id("com.android.application") version "8.7.3" apply false
-            id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+            id("com.android.application") version "8.13.2" apply false
+            id("org.jetbrains.kotlin.android") version "2.2.21" apply false
+        }
+        
+        tasks.register("clean", Delete::class) {
+            delete(rootProject.layout.buildDirectory)
         }
         BUILD
         
@@ -99,42 +109,79 @@ jobs:
             id("com.android.application")
             id("org.jetbrains.kotlin.android")
         }
+        
         android {
             namespace = "com.ntrli.droidforge"
-            compileSdk = 35
+            compileSdk = 36
+            
             defaultConfig {
                 applicationId = "com.ntrli.droidforge"
                 minSdk = 24
-                targetSdk = 35
+                targetSdk = 36
                 versionCode = 1
                 versionName = "1.0.0"
                 testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+                
+                vectorDrawables {
+                    useSupportLibrary = true
+                }
             }
+            
             buildTypes {
                 release {
-                    isMinifyEnabled = false
+                    isMinifyEnabled = true
+                    isShrinkResources = true
                     proguardFiles(
                         getDefaultProguardFile("proguard-android-optimize.txt"),
                         "proguard-rules.pro"
                     )
                 }
+                debug {
+                    isMinifyEnabled = false
+                    applicationIdSuffix = ".debug"
+                    versionNameSuffix = "-DEBUG"
+                }
             }
+            
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
             }
+            
             kotlinOptions {
                 jvmTarget = "17"
+                freeCompilerArgs += listOf(
+                    "-opt-in=kotlin.RequiresOptIn"
+                )
             }
+            
             buildFeatures {
                 viewBinding = true
+                buildConfig = true
+            }
+            
+            packaging {
+                resources {
+                    excludes += "/META-INF/{AL2.0,LGPL2.1}"
+                }
             }
         }
+        
         dependencies {
+            // Core Android
             implementation("androidx.core:core-ktx:1.15.0")
             implementation("androidx.appcompat:appcompat:1.7.0")
+            
+            // Material Design
             implementation("com.google.android.material:material:1.12.0")
+            
+            // ConstraintLayout
             implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+            
+            // Lifecycle
+            implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+            
+            // Testing
             testImplementation("junit:junit:4.13.2")
             androidTestImplementation("androidx.test.ext:junit:1.2.1")
             androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
@@ -145,27 +192,46 @@ jobs:
         cat > app/proguard-rules.pro << 'PROGUARD'
         # NTRLI DroidForge ProGuard Rules
         -keepattributes *Annotation*
+        -keepattributes SourceFile,LineNumberTable
+        -keepattributes Signature
+        -keepattributes *Annotation*
+        
+        # Keep Activities
+        -keep public class * extends android.app.Activity
+        -keep public class * extends androidx.appcompat.app.AppCompatActivity
+        -keep public class * extends androidx.fragment.app.Fragment
+        
+        # Keep WebView JavaScript Interface
         -keepclassmembers class * {
             @android.webkit.JavascriptInterface <methods>;
         }
-        -keep public class * extends android.app.Activity
-        -keep public class * extends androidx.appcompat.app.AppCompatActivity
+        
+        # Kotlin
+        -dontwarn kotlin.**
+        -dontwarn kotlinx.**
         PROGUARD
         
         # Create AndroidManifest.xml
         cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
         <?xml version="1.0" encoding="utf-8"?>
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+            xmlns:tools="http://schemas.android.com/tools">
+            
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+            
             <application
                 android:allowBackup="true"
                 android:icon="@mipmap/ic_launcher"
                 android:label="@string/app_name"
-                android:theme="@style/Theme.MaterialComponents.DayNight">
+                android:roundIcon="@mipmap/ic_launcher_round"
+                android:supportsRtl="true"
+                android:theme="@style/Theme.NTRLIDroidForge"
+                tools:targetApi="36">
                 <activity
                     android:name=".MainActivity"
-                    android:exported="true">
+                    android:exported="true"
+                    android:theme="@style/Theme.NTRLIDroidForge">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
@@ -180,18 +246,37 @@ jobs:
         package com.ntrli.droidforge
         
         import android.os.Bundle
-        import androidx.appcompat.app.AppCompatActivity
+        import android.widget.LinearLayout
         import android.widget.TextView
+        import androidx.appcompat.app.AppCompatActivity
+        import androidx.core.content.ContextCompat
         
         class MainActivity : AppCompatActivity() {
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
-                val textView = TextView(this).apply {
-                    text = "🌿 NTRLI DroidForge\n\nBuilt with precision.\nNo compromises."
-                    textSize = 20f
+                
+                val layout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
                     setPadding(64, 64, 64, 64)
+                    setBackgroundColor(ContextCompat.getColor(context, R.color.background))
                 }
-                setContentView(textView)
+                
+                val titleView = TextView(this).apply {
+                    text = "🌿 NTRLI DroidForge"
+                    textSize = 28f
+                    setTextColor(ContextCompat.getColor(context, R.color.text))
+                    setPadding(0, 0, 0, 32)
+                }
+                
+                val subtitleView = TextView(this).apply {
+                    text = "Built with precision.\nNo compromises.\n\nVersion: ${BuildConfig.VERSION_NAME}"
+                    textSize = 18f
+                    setTextColor(ContextCompat.getColor(context, R.color.text))
+                }
+                
+                layout.addView(titleView)
+                layout.addView(subtitleView)
+                setContentView(layout)
             }
         }
         MAIN
@@ -210,81 +295,107 @@ jobs:
             <color name="primary">#4CAF50</color>
             <color name="primary_dark">#388E3C</color>
             <color name="accent">#8BC34A</color>
+            <color name="background">#E8F5E9</color>
+            <color name="text">#1B5E20</color>
+            <color name="white">#FFFFFF</color>
+            <color name="black">#000000</color>
         </resources>
         COLORS
         
+        # Create themes.xml
+        cat > app/src/main/res/values/themes.xml << 'THEMES'
+        <resources xmlns:tools="http://schemas.android.com/tools">
+            <style name="Theme.NTRLIDroidForge" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+                <item name="colorPrimary">@color/primary</item>
+                <item name="colorPrimaryDark">@color/primary_dark</item>
+                <item name="colorAccent">@color/accent</item>
+                <item name="android:statusBarColor">@color/primary_dark</item>
+            </style>
+        </resources>
+        THEMES
+        
         # Create gradle.properties
         cat > gradle.properties << 'PROPS'
-        org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+        org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
+        org.gradle.parallel=true
+        org.gradle.caching=true
+        org.gradle.configureondemand=true
         android.useAndroidX=true
         android.enableJetifier=true
         kotlin.code.style=official
         android.nonTransitiveRClass=false
+        android.defaults.buildfeatures.buildconfig=true
         PROPS
         
         echo "✅ Android project structure initialized"
         
-    - name: Install Gradle wrapper (Primary - 8.11)
+    - name: Install Gradle wrapper (Primary - 8.13)
       id: gradle_primary
       continue-on-error: true
       run: |
-        echo "🔧 Installing Gradle wrapper 8.11 (primary)..."
+        echo "🔧 Installing Gradle 8.13 (LATEST STABLE)..."
+        gradle wrapper --gradle-version 8.13 --distribution-type all
+        chmod +x gradlew
+        if ./gradlew --version 2>&1 | grep -q "Gradle 8.13"; then
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "version=8.13" >> $GITHUB_OUTPUT
+          echo "✅ Gradle 8.13 installed successfully"
+        else
+          echo "success=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Gradle 8.13 failed"
+        fi
+        
+    - name: Install Gradle wrapper (Fallback 1 - 8.11)
+      if: steps.gradle_primary.outputs.success != 'true'
+      id: gradle_fallback1
+      continue-on-error: true
+      run: |
+        echo "🔄 Trying fallback: Gradle 8.11..."
+        rm -rf gradle gradlew gradlew.bat
+        
+        # Update AGP to 8.11-compatible version
+        if [ -f "build.gradle.kts" ]; then
+          sed -i 's/id("com.android.application") version "[^"]*"/id("com.android.application") version "8.11.2"/' build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.1.0"/' build.gradle.kts
+        fi
+        
         gradle wrapper --gradle-version 8.11 --distribution-type all
         chmod +x gradlew
-        if ./gradlew --version; then
+        if ./gradlew --version 2>&1 | grep -q "Gradle 8.11"; then
           echo "success=true" >> $GITHUB_OUTPUT
+          echo "version=8.11" >> $GITHUB_OUTPUT
           echo "✅ Gradle 8.11 installed successfully"
         else
           echo "success=false" >> $GITHUB_OUTPUT
           echo "⚠️ Gradle 8.11 failed"
         fi
         
-    - name: Install Gradle wrapper (Fallback 1 - 8.9)
-      if: steps.gradle_primary.outputs.success != 'true'
-      id: gradle_fallback1
+    - name: Install Gradle wrapper (Fallback 2 - 8.9)
+      if: steps.gradle_fallback1.outputs.success != 'true'
+      id: gradle_fallback2
       continue-on-error: true
       run: |
         echo "🔄 Trying fallback: Gradle 8.9..."
         rm -rf gradle gradlew gradlew.bat
         
-        # Update AGP to 8.6.1 for Gradle 8.9 compatibility
+        # Update AGP and Kotlin for 8.9 compatibility
         if [ -f "build.gradle.kts" ]; then
-          sed -i 's/id("com.android.application") version "[^"]*"/id("com.android.application") version "8.6.1"/' build.gradle.kts
+          sed -i 's/id("com.android.application") version "[^"]*"/id("com.android.application") version "8.9.2"/' build.gradle.kts
           sed -i 's/id("org.jetbrains.kotlin.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.0.21"/' build.gradle.kts
+          # Adjust compileSdk to 35 for older AGP
+          sed -i 's/compileSdk = 36/compileSdk = 35/' app/build.gradle.kts
+          sed -i 's/targetSdk = 36/targetSdk = 35/' app/build.gradle.kts
         fi
         
         gradle wrapper --gradle-version 8.9 --distribution-type all
         chmod +x gradlew
-        if ./gradlew --version; then
+        if ./gradlew --version 2>&1 | grep -q "Gradle 8.9"; then
           echo "success=true" >> $GITHUB_OUTPUT
+          echo "version=8.9" >> $GITHUB_OUTPUT
           echo "✅ Gradle 8.9 installed successfully"
         else
           echo "success=false" >> $GITHUB_OUTPUT
           echo "⚠️ Gradle 8.9 failed"
-        fi
-        
-    - name: Install Gradle wrapper (Fallback 2 - 8.7)
-      if: steps.gradle_fallback1.outputs.success != 'true'
-      id: gradle_fallback2
-      continue-on-error: true
-      run: |
-        echo "🔄 Trying fallback: Gradle 8.7..."
-        rm -rf gradle gradlew gradlew.bat
-        
-        # Update AGP to 8.5.2 for Gradle 8.7 compatibility
-        if [ -f "build.gradle.kts" ]; then
-          sed -i 's/id("com.android.application") version "[^"]*"/id("com.android.application") version "8.5.2"/' build.gradle.kts
-          sed -i 's/id("org.jetbrains.kotlin.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.0.0"/' build.gradle.kts
-        fi
-        
-        gradle wrapper --gradle-version 8.7 --distribution-type all
-        chmod +x gradlew
-        if ./gradlew --version; then
-          echo "success=true" >> $GITHUB_OUTPUT
-          echo "✅ Gradle 8.7 installed successfully"
-        else
-          echo "success=false" >> $GITHUB_OUTPUT
-          echo "⚠️ Gradle 8.7 failed"
         fi
         
     - name: Verify Gradle installation
@@ -295,6 +406,8 @@ jobs:
         fi
         echo "📊 Gradle version:"
         ./gradlew --version
+        echo ""
+        echo "✅ Using Gradle: ${{ steps.gradle_primary.outputs.version || steps.gradle_fallback1.outputs.version || steps.gradle_fallback2.outputs.version }}"
         
     - name: Cache Gradle dependencies
       uses: actions/cache@v4
@@ -303,46 +416,58 @@ jobs:
           ~/.gradle/caches
           ~/.gradle/wrapper
           ~/.android/build-cache
-        key: ${{ runner.os }}-gradle-${{ github.sha }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
+          
+    - name: Run Gradle clean
+      run: |
+        echo "🧹 Cleaning build..."
+        ./gradlew clean --stacktrace
           
     - name: Run tests
       id: test
       continue-on-error: true
       run: |
+        echo "🧪 Running tests..."
         ./gradlew test --stacktrace || echo "⚠️ Tests failed but continuing"
         
     - name: Build Debug APK
       id: build_debug
       if: github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == ''
-      continue-on-error: true
       run: |
         echo "🔨 Building Debug APK..."
-        if ./gradlew assembleDebug --stacktrace --no-daemon; then
+        ./gradlew assembleDebug --stacktrace --no-daemon --info
+        
+        DEBUG_APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+        if [ -n "$DEBUG_APK" ] && [ -f "$DEBUG_APK" ]; then
           echo "success=true" >> $GITHUB_OUTPUT
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
           echo "apk_path=$DEBUG_APK" >> $GITHUB_OUTPUT
-          echo "✅ Debug APK built successfully"
+          echo "✅ Debug APK built: $DEBUG_APK"
+          ls -lh "$DEBUG_APK"
         else
           echo "success=false" >> $GITHUB_OUTPUT
-          echo "⚠️ Debug build failed"
+          echo "❌ Debug APK not found"
+          exit 1
         fi
         
     - name: Build Release APK
       id: build_release
       if: github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == ''
-      continue-on-error: true
       run: |
         echo "🔨 Building Release APK..."
-        if ./gradlew assembleRelease --stacktrace --no-daemon; then
+        ./gradlew assembleRelease --stacktrace --no-daemon --info
+        
+        RELEASE_APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+        if [ -n "$RELEASE_APK" ] && [ -f "$RELEASE_APK" ]; then
           echo "success=true" >> $GITHUB_OUTPUT
-          RELEASE_APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
-          echo "✅ Release APK built successfully"
+          echo "✅ Release APK built: $RELEASE_APK"
+          ls -lh "$RELEASE_APK"
         else
           echo "success=false" >> $GITHUB_OUTPUT
-          echo "⚠️ Release build failed"
+          echo "❌ Release APK not found"
+          exit 1
         fi
       env:
         SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
@@ -361,11 +486,11 @@ jobs:
     - name: Rename APK files
       run: |
         if [ "${{ steps.build_debug.outputs.success }}" == "true" ] && [ -f "${{ steps.build_debug.outputs.apk_path }}" ]; then
-          cp "${{ steps.build_debug.outputs.apk_path }}" "app-debug-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
+          cp "${{ steps.build_debug.outputs.apk_path }}" "NTRLI-DroidForge-debug-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
           echo "✅ Debug APK renamed"
         fi
         if [ "${{ steps.build_release.outputs.success }}" == "true" ] && [ -f "${{ steps.build_release.outputs.apk_path }}" ]; then
-          cp "${{ steps.build_release.outputs.apk_path }}" "app-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
+          cp "${{ steps.build_release.outputs.apk_path }}" "NTRLI-DroidForge-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_date }}.apk"
           echo "✅ Release APK renamed"
         fi
         
@@ -373,19 +498,19 @@ jobs:
       uses: actions/upload-artifact@v4
       if: steps.build_debug.outputs.success == 'true'
       with:
-        name: debug-apk-v${{ steps.version.outputs.version_name }}
-        path: app-debug-*.apk
+        name: NTRLI-DroidForge-debug-v${{ steps.version.outputs.version_name }}
+        path: NTRLI-DroidForge-debug-*.apk
         retention-days: 30
-        if-no-files-found: warn
+        if-no-files-found: error
         
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       if: steps.build_release.outputs.success == 'true'
       with:
-        name: release-apk-v${{ steps.version.outputs.version_name }}
-        path: app-release-*.apk
+        name: NTRLI-DroidForge-release-v${{ steps.version.outputs.version_name }}
+        path: NTRLI-DroidForge-release-*.apk
         retention-days: 90
-        if-no-files-found: warn
+        if-no-files-found: error
         
     - name: Generate build summary
       if: always()
@@ -396,20 +521,23 @@ jobs:
         echo "- **Version:** ${{ steps.version.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Version Code:** ${{ steps.version.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Build Date:** ${{ steps.version.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Gradle Version:** ${{ steps.gradle_primary.outputs.version || steps.gradle_fallback1.outputs.version || steps.gradle_fallback2.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## Build Status" >> $GITHUB_STEP_SUMMARY
         if [ "${{ steps.build_debug.outputs.success }}" == "true" ]; then
-          echo "- ✅ Debug APK built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Debug APK** built successfully" >> $GITHUB_STEP_SUMMARY
         else
-          echo "- ❌ Debug APK build failed" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ **Debug APK** build failed" >> $GITHUB_STEP_SUMMARY
         fi
         if [ "${{ steps.build_release.outputs.success }}" == "true" ]; then
-          echo "- ✅ Release APK built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Release APK** built successfully" >> $GITHUB_STEP_SUMMARY
         else
-          echo "- ❌ Release APK build failed" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ **Release APK** build failed" >> $GITHUB_STEP_SUMMARY
         fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🌿 Built with precision. No compromises." >> $GITHUB_STEP_SUMMARY
         
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -426,7 +554,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: failure()
       with:
-        name: build-logs
+        name: build-logs-failure
         path: |
           app/build/reports/
           build/reports/
@@ -439,17 +567,9 @@ jobs:
       run: |
         rm -f ~/.gradle/caches/modules-2/modules-2.lock
         rm -f ~/.gradle/caches/modules-2/gc.properties
-        
-    - name: Check build success
-      run: |
-        if [ "${{ steps.build_debug.outputs.success }}" != "true" ] && [ "${{ steps.build_release.outputs.success }}" != "true" ]; then
-          echo "❌ All builds failed"
-          exit 1
-        fi
-        echo "✅ At least one build succeeded"
 
   release:
-    name: Create Release
+    name: Create GitHub Release
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -464,26 +584,32 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          release-apk-*/*.apk
-          debug-apk-*/*.apk
+          NTRLI-DroidForge-release-*/*.apk
+          NTRLI-DroidForge-debug-*/*.apk
         draft: false
         prerelease: false
         generate_release_notes: true
         body: |
           ## 🚀 NTRLI DroidForge Release
           
-          Automated build from GitHub Actions.
-          Built with precision. No compromises.
+          Professional Android application built with precision.
           
           ### 📦 Downloads
-          - **Release APK**: Production-ready build
-          - **Debug APK**: Development build with debugging
+          - **Release APK**: Production-ready, optimized build
+          - **Debug APK**: Development build with debugging enabled
           
           ### 📝 Installation
-          1. Download the APK file
+          1. Download the appropriate APK file
           2. Enable "Install from Unknown Sources" in Android settings
-          3. Install the APK
+          3. Install the APK on your device
           
-          🌿 NTRLI DroidForge - Professional Android automation
+          ### 🔧 Technical Details
+          - **Gradle**: 8.13 (Latest Stable)
+          - **AGP**: 8.13.2
+          - **Kotlin**: 2.2.21
+          - **Min SDK**: 24 (Android 7.0)
+          - **Target SDK**: 36 (Android 15+)
+          
+          🌿 Built with precision. No compromises.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
