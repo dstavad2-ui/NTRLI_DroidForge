@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    name: Build APK (Authoritative)
+    name: Build APK (System Gradle)
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -31,17 +31,19 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Ensure Gradle wrapper executable
-        run: chmod +x ./gradlew
+      # 🔑 DO NOT TOUCH gradlew — USE SYSTEM GRADLE
+      - name: Verify Gradle
+        run: |
+          gradle --version
 
-      # 🔑 PRIMARY OBJECTIVE — APK FIRST
+      # 🔨 PRIMARY OBJECTIVE — APK FIRST
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: gradle assembleDebug
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: gradle assembleRelease
 
-      # 📦 Collect artifacts
+      # 📦 Collect APKs
       - name: Collect APKs
         run: |
           mkdir -p artifacts
@@ -54,14 +56,14 @@ jobs:
           path: artifacts/*.apk
           retention-days: 30
 
-      # 🔍 SECONDARY — VALIDATION (NON-BLOCKING)
+      # 🔍 OPTIONAL — NON-BLOCKING VALIDATION
       - name: Lint (informational)
         continue-on-error: true
-        run: ./gradlew lintDebug --no-daemon
+        run: gradle lintDebug
 
       - name: Tests (informational)
         continue-on-error: true
-        run: ./gradlew test --no-daemon
+        run: gradle test
 
   release:
     name: GitHub Release
