@@ -55,8 +55,24 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
           
+    - name: Check for Gradle wrapper
+      id: gradle_check
+      run: |
+        if [ -f "gradlew" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+        
     - name: Make gradlew executable
+      if: steps.gradle_check.outputs.exists == 'true'
       run: chmod +x gradlew
+      
+    - name: Setup Gradle wrapper
+      if: steps.gradle_check.outputs.exists == 'false'
+      run: |
+        gradle wrapper --gradle-version 8.5
+        chmod +x gradlew
       
     - name: Validate Gradle wrapper
       uses: gradle/wrapper-validation-action@v2
