@@ -16,13 +16,13 @@ jobs:
 
     steps:
       # ------------------------------------------------------------
-      # 1. Checkout
+      # 1. Checkout repository
       # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ------------------------------------------------------------
-      # 2. Python
+      # 2. Set up Python
       # ------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,7 +30,7 @@ jobs:
           python-version: "3.11"
 
       # ------------------------------------------------------------
-      # 3. System dependencies (Buildozer + Android)
+      # 3. Install system dependencies
       # ------------------------------------------------------------
       - name: Install system dependencies
         run: |
@@ -40,14 +40,15 @@ jobs:
             openjdk-17-jdk \
             python3-pip \
             autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake \
+            zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 \
             libffi-dev libssl-dev \
             build-essential \
+            cmake \
             ccache
 
       # ------------------------------------------------------------
-      # 4. Python dependencies
+      # 4. Install Python dependencies
       # ------------------------------------------------------------
       - name: Install Python dependencies
         run: |
@@ -55,24 +56,23 @@ jobs:
           pip install buildozer cython virtualenv
 
       # ------------------------------------------------------------
-      # 5. Initialize Buildozer (installs Android SDK)
+      # 5. Initialize Buildozer (installs Android SDK + NDK)
       # ------------------------------------------------------------
       - name: Initialize Buildozer
         run: |
           buildozer android help
 
       # ------------------------------------------------------------
-      # 6. ACCEPT ANDROID SDK LICENSES (CRITICAL FIX)
-      #    Must happen AFTER SDK exists
+      # 6. Accept Android SDK licenses (CRITICAL)
       # ------------------------------------------------------------
       - name: Accept Android SDK licenses
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
       # ------------------------------------------------------------
-      # 7. Ensure required build-tools + platform-tools
+      # 7. Install required Android components
       # ------------------------------------------------------------
-      - name: Install Android build-tools
+      - name: Install Android build tools
         run: |
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
@@ -80,7 +80,7 @@ jobs:
             "build-tools;33.0.2"
 
       # ------------------------------------------------------------
-      # 8. Verify aidl (hard gate)
+      # 8. Verify aidl exists (hard gate)
       # ------------------------------------------------------------
       - name: Verify aidl
         run: |
@@ -95,7 +95,7 @@ jobs:
           buildozer android debug
 
       # ------------------------------------------------------------
-      # 10. Upload APK
+      # 10. Upload APK artifact
       # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
