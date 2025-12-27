@@ -1,0 +1,76 @@
+name: NTRLI_DroidForge_Full_Fix
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17 (The Ground Truth Fix)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip build-essential git python3-dev \
+            libffi-dev libssl-dev libltdl-dev zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 \
+            cmake zip unzip ant autoconf libtool
+
+      - name: Reconstruct Android SDK Layout (The Coherence Fix)
+        run: |
+          # Define and create the deterministic path
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          
+          # Download Command Line Tools
+          cd $ANDROID_HOME/cmdline-tools
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip commandlinetools-linux-*.zip
+          
+          # CRITICAL: Move to 'latest' so sdkmanager can find itself
+          mv cmdline-tools latest
+          
+          # Export to GITHUB_ENV for subsequent steps
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
+
+      - name: Accept Licenses & Install Stable Tools (The AIDL Fix)
+        run: |
+          # 1. Accept licenses first to unlock package installations
+          yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
+          
+          # 2. Install specific, non-buggy versions of platforms and build-tools
+          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653" "platform-tools"
+
+      - name: Final Verification
+        run: |
+          echo "Checking for aidl..."
+          test -f $ANDROID_HOME/build-tools/33.0.2/aidl && echo "AIDL Found" || exit 1
+          sdkmanager --version
+
+      - name: Build APK with Buildozer
+        run: |
+          pip3 install --user --upgrade buildozer
+          # Force Buildozer to respect our pre-built environment
+          buildozer android release
+        env:
+          # Injects the paths directly into the Buildozer sub-process
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+
+      - name: Upload Finished APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI_Fixed_Build
+          path: bin/*.apk
