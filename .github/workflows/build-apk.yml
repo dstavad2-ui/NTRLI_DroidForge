@@ -1,108 +1,90 @@
-name: Android APK Build (ABSOLUTE FINAL)
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-permissions:
-  contents: write
+name: NTRLI_DroidForge_Perfected_CI
+on: [push, workflow_dispatch]
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-
+  validate_and_build:
+    runs-on: ubuntu-22.04
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: 🚀 1. Source Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-        cache: pip
+      - name: 🔐 2. Secrets Integrity Check
+        shell: bash
+        run: |
+          echo "🔍 Checking for required GitHub Secrets..."
+          MISSING_SECRETS=()
+          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && MISSING_SECRETS+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "${{ secrets.ANDROID_KEYSTORE_PASS }}" ] && MISSING_SECRETS+=("ANDROID_KEYSTORE_PASS")
+          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && MISSING_SECRETS+=("ANDROID_KEY_ALIAS")
+          [ -z "${{ secrets.ANDROID_KEY_PASS }}" ] && MISSING_SECRETS+=("ANDROID_KEY_PASS")
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          openjdk-17-jdk \
-          unzip zip \
-          build-essential \
-          libffi-dev libssl-dev libsqlite3-dev \
-          zlib1g-dev libncurses-dev \
-          autoconf automake libtool pkg-config
+          if [ ${#MISSING_SECRETS[@]} -ne 0 ]; then
+            echo "::error::❌ CRITICAL: The following secrets are missing: ${MISSING_SECRETS[*]}"
+            exit 1
+          fi
+          echo "✅ All signing secrets are present."
 
-    - name: Configure Android SDK paths
-      run: |
-        SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
-        echo "BUILDOZER_ANDROID_SDK=$SDK_ROOT" >> $GITHUB_ENV
-        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-
-    - name: Install Android SDK (RECURSION SAFE)
-      run: |
-        SDK="$ANDROID_SDK_ROOT"
-        mkdir -p "$SDK"
-        cd "$SDK"
-
-        curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
-        unzip -q tools.zip
-        rm tools.zip
-
-        # Normalize cmdline-tools layout safely
-        if [ -d "cmdline-tools/latest" ]; then
-          echo "cmdline-tools/latest already exists — OK"
-        else
-          mkdir -p cmdline-tools/latest
-          for d in cmdline-tools/*; do
-            [ "$(basename "$d")" = "latest" ] && continue
-            mv "$d" cmdline-tools/latest/
+      - name: 📁 3. Engine Folder Validation
+        run: |
+          echo "🔍 Scanning engine directory structure..."
+          REQUIRED_DIRS=("engine/ai" "engine/authority" "engine/commands" "engine/router" "engine/state" "engine/trace" "engine/utils")
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::❌ Missing directory: $dir"
+              exit 1
+            fi
           done
-        fi
+          echo "✅ Repository folder structure is coherent."
 
-        yes | cmdline-tools/latest/bin/sdkmanager --licenses
+      - name: 🐍 4. Python Syntax Coherence Scan
+        run: |
+          echo "🔍 Scanning for Python syntax errors..."
+          python3 -m compileall -q .
+          echo "✅ No syntax errors found in current branch."
 
-        cmdline-tools/latest/bin/sdkmanager \
-          "platform-tools" \
-          "platforms;android-33" \
-          "build-tools;33.0.2" \
-          "ndk;25.1.8937393"
+      - name: ☕ 5. Java 17 Enforcement
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    - name: Install Buildozer
-      run: |
-        python -m pip install --upgrade pip
-        pip install "cython<3.0" buildozer
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: 🛰️ 6. SDK Layout Reconstruction
+        run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip *.zip
+          mv cmdline-tools latest
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-    - name: Validate inputs
-      run: |
-        test -f buildozer.spec
-        test -f main.py
+      - name: 🛡️ 7. License & Aidl Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libstdc++6 lib32z1 lib32stdc++6
+          yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
+          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-    - name: Build APK
-      run: |
-        buildozer -v android debug
+      - name: 🧪 8. Validated Buildozer Build
+        run: |
+          pip3 install --user --upgrade buildozer cython==0.29.33
+          buildozer -v android release
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-    - name: Verify APK output
-      run: |
-        ls -lah bin
-        test -f bin/*-debug.apk
+      - name: ✍️ 9. Automated Signing
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: bin
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASS }}
 
-    - name: Prepare release assets
-      run: |
-        mkdir -p release
-        cp bin/*-debug.apk release/
-
-    - name: Publish GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: apk-${{ github.run_number }}
-        name: DroidForge APK ${{ github.run_number }}
-        body: |
-          Automated Android APK build.
-          Commit: ${{ github.sha }}
-        files: |
-          release/*
+      - name: 📦 10. APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI-Perfected-APK
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
