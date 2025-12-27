@@ -1,68 +1,96 @@
-name: Build Android APK
+name: Build Android APK (NTRLI)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "NTRLI Finalizer – Part 2 (License + Toolchain Validation)"
+    types:
+      - completed
 
 jobs:
   build-apk:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 60
+
+    env:
+      ANDROID_SDK_ROOT: /home/runner/android-sdk
+      ANDROID_HOME: /home/runner/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      PYTHONUNBUFFERED: 1
 
     steps:
+      # ----------------------------
+      # 1. Checkout source
+      # ----------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Set up Python
+      # ----------------------------
+      # 2. Python (Buildozer-compatible)
+      # ----------------------------
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ----------------------------
+      # 3. System dependencies
+      # ----------------------------
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt update
+          sudo apt install -y \
             zip unzip \
             openjdk-17-jdk \
-            python3-pip \
-            build-essential \
-            libssl-dev libffi-dev \
-            libncurses5-dev libncursesw5-dev \
-            zlib1g-dev
+            libncurses5 \
+            libstdc++6 \
+            zlib1g-dev \
+            libffi-dev \
+            libssl-dev
 
-      - name: Install Buildozer
+      # ----------------------------
+      # 4. Restore PATH (critical)
+      # ----------------------------
+      - name: Restore Android PATH
         run: |
-          python -m pip install --upgrade pip
-          pip install buildozer cython
+          export PATH="/usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          which java
+          which sdkmanager || true
 
-      # Let Buildozer initialize and install SDK/NDK
-      - name: Initialize Buildozer (SDK install)
+      # ----------------------------
+      # 5. Python build deps
+      # ----------------------------
+      - name: Install Python build dependencies
         run: |
-          buildozer android debug || true
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install buildozer cython
 
-      # Now accept licenses using the same sdkmanager path Buildozer uses
-      - name: Accept Android SDK licenses
+      # ----------------------------
+      # 6. Build APK
+      # ----------------------------
+      - name: Build APK with Buildozer
         run: |
-          yes | /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager \
-            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
-            --licenses
-
-      # Install essential Android components
-      - name: Install build-tools & platform-tools
-        run: |
-          /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager \
-            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
-
-      - name: Build the APK
-        run: |
+          buildozer android clean
           buildozer android debug
 
-      - name: Upload APK
+      # ----------------------------
+      # 7. Verify APK output
+      # ----------------------------
+      - name: Verify APK artifact
+        run: |
+          ls -lah bin
+          test -f bin/*.apk
+
+      # ----------------------------
+      # 8. Upload APK
+      # ----------------------------
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: ntrli-apk
           path: bin/*.apk
+          retention-days: 7
