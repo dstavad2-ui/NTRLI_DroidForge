@@ -1,34 +1,35 @@
-name: NTRLI Repository Finalizer
+name: NTRLI Engine – Finalizer (Auto-Fix + Normalize)
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-      - fix/utils-import
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
   pull_request:
-    branches:
-      - main
+    types: [opened, edited]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   finalize:
     runs-on: ubuntu-22.04
 
     steps:
-      # -------------------------------------------------
-      # CHECKOUT (FULL HISTORY REQUIRED FOR FIX COMMITS)
-      # -------------------------------------------------
+      # --------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # -------------------------------------------------
-      # PYTHON BASELINE
-      # -------------------------------------------------
+      # --------------------------------------------------
+      # PYTHON SETUP
+      # --------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -43,12 +44,13 @@ jobs:
             pip install -r .github/scripts/requirements.txt
           fi
 
-      # -------------------------------------------------
-      # PYTHON PACKAGE NORMALIZATION (AUTHORITATIVE)
-      # -------------------------------------------------
-      - name: Enforce Python package integrity
+      # --------------------------------------------------
+      # AUTO-FIX: PYTHON PACKAGE NORMALIZATION
+      # --------------------------------------------------
+      - name: Ensure engine is a valid Python package
         run: |
           set -e
+          echo "Validating Python package structure..."
 
           REQUIRED_DIRS=(
             "engine"
@@ -67,57 +69,42 @@ jobs:
             fi
           done
 
-      # -------------------------------------------------
-      # EXECUTION MODE ENFORCEMENT (NO SCRIPT EXEC)
-      # -------------------------------------------------
-      - name: Enforce module-safe execution
+      # --------------------------------------------------
+      # AUTO-FIX: INVALID WORKFLOW EXECUTION
+      # --------------------------------------------------
+      - name: Normalize workflow Python execution
         run: |
           set -e
-          if grep -R "python engine/bootstrap.py" -n .github/workflows; then
-            echo "::error::Direct script execution detected. Use python -m engine.bootstrap"
-            exit 1
-          fi
+          echo "Normalizing workflow execution patterns..."
 
-      # -------------------------------------------------
-      # ANDROID SDK HARDENING (NO BUILD, NO BUILDOZER)
-      # -------------------------------------------------
-      - name: Install Android SDK + accept licenses
-        run: |
-          set -e
+          for file in .github/workflows/*.yml; do
+            if grep -q "python engine/bootstrap.py" "$file"; then
+              echo "Fixing execution pattern in $file"
+              sed -i 's|python engine/bootstrap.py|python -m engine.bootstrap|g' "$file"
+            fi
+          done
 
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export ANDROID_HOME="$ANDROID_SDK_ROOT"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          cd "$ANDROID_SDK_ROOT/cmdline-tools"
-
-          if [ ! -d latest ]; then
-            curl -s https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
-            unzip -q tools.zip
-            mv cmdline-tools latest
-          fi
-
-          yes | sdkmanager --licenses
-
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;36.1.0"
-
-          test -f "$ANDROID_SDK_ROOT/build-tools/36.1.0/aidl"
-
-      # -------------------------------------------------
-      # COMMIT NORMALIZATION (ONLY IF REQUIRED)
-      # -------------------------------------------------
-      - name: Commit finalizer fixes if any
+      # --------------------------------------------------
+      # AUTO-COMMIT FIXES (IF ANY)
+      # --------------------------------------------------
+      - name: Commit auto-fixes if required
         run: |
           if git status --porcelain | grep .; then
-            git config user.name "ntrli-finalizer-bot"
-            git config user.email "finalizer@ntrli.local"
+            echo "Auto-fixes detected. Committing..."
+            git config user.name "ntrli-autofix-bot"
+            git config user.email "autofix@ntrli.local"
             git add .
-            git commit -m "finalize: enforce build-ready state"
+            git commit -m "auto-fix: normalize engine packaging and execution"
             git push
           else
-            echo "Repository already build-ready."
+            echo "No fixes required."
           fi
+
+      # --------------------------------------------------
+      # SAFE EXECUTION VALIDATION
+      # --------------------------------------------------
+      - name: Validate engine bootstrap (module-safe)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m engine.bootstrap
