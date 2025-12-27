@@ -20,23 +20,21 @@ jobs:
       PYTHONUNBUFFERED: 1
 
     steps:
-      # 1. Checkout the source
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # 1. Checkout repository
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      # 2. Set up Python
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # 2. Python for Buildozer
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3. Install required system dependencies
+      # 3. System dependencies
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt update
+          sudo apt install -y \
             zip unzip \
             openjdk-17-jdk \
             libncurses5 \
@@ -44,39 +42,56 @@ jobs:
             zlib1g-dev \
             libffi-dev \
             libssl-dev \
+            liblzma-dev \
             cmake \
             pkg-config
 
-      # 4. Restore Android PATH for this runner
+      # 4. Restore PATH (runtime-safe)
       - name: Restore Android PATH
         run: |
           export PATH="/usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
           echo "PATH=$PATH" >> $GITHUB_ENV
           java -version
-          sdkmanager --version || true
 
-      # 5. Install Buildozer and Python dependencies
+      # 5. Accept Android SDK licenses (REQUIRED)
+      - name: Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
+
+      # 6. Install required SDK components explicitly
+      - name: Install Android SDK build tools
+        run: |
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+      # 7. Verify aidl exists (hard gate)
+      - name: Verify build tools
+        run: |
+          ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
+          "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
+
+      # 8. Python build tooling
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython virtualenv
 
-      # 6. Build the APK
-      - name: Build APK with Buildozer
+      # 9. Build APK (cold-run safe)
+      - name: Build APK
         run: |
           buildozer android debug
 
-      # 7. Verify that an APK was generated
-      - name: Verify APK output
+      # 10. Verify output
+      - name: Verify APK
         run: |
-          echo "Listing APK output directory:"
           ls -lah bin
           test -f bin/*.apk
 
-      # 8. Upload the APK artifact
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      # 11. Upload artifact
+      - uses: actions/upload-artifact@v4
         with:
-          name: ntrli-debug-apk
+          name: ntrli-apk
           path: bin/*.apk
           retention-days: 7
