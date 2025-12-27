@@ -1,58 +1,57 @@
-name: "Part 2: NTRLI Corrective Forge"
+name: "Part 2: NTRLI Self-Healing Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Diagnostic Scanner"]
+    workflows: ["Part 1: NTRLI Auditor"]
     types: [completed]
 
 jobs:
-  forge_apk:
+  autonomous_build:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      # Self-correcting dummy secrets
       KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || '123' }}
 
     steps:
       - name: 🚀 Branch Sync
         uses: actions/checkout@v4
 
-      - name: 🛠️ Corrective Patch (Multi-Arch Fix)
+      - name: 🩹 Automated Patching (Multi-Arch)
         run: |
-          echo "Injecting 32-bit architecture to resolve Aidl execution failure..."
+          echo "Autonomously applying 32-bit execution patch..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
-            python3-pip build-essential cmake zip unzip libncurses5:i386
+            cmake zip unzip libncurses5:i386
 
-      - name: 🛰️ SDK Reconstruction (Latest Standard)
+      - name: 🛰️ SDK Autonomy (Nesting Standard)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q *.zip
-          mv cmdline-tools latest # Necessary for sdkmanager resolution
+          mv cmdline-tools latest
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Platform Sync
+      - name: 🛡️ License & Binary Verification
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
-
-      - name: ✅ Aidl Coherence Test
-        run: |
-          # Verifying the fix from Job 59015607646
+          # Autonomous Test: If aidl doesn't run, the workflow fails immediately here
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 Buildozer Immutable Run
+      - name: 🧪 Buildozer Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: 📦 Archive Build Artifacts
+      - name: 📦 Final APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-DroidForge-APK
+          name: NTRLI-Autonomous-APK
           path: bin/*.apk
