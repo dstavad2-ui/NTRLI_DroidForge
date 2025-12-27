@@ -1,0 +1,123 @@
+name: NTRLI Repository Finalizer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - fix/utils-import
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # -------------------------------------------------
+      # CHECKOUT (FULL HISTORY REQUIRED FOR FIX COMMITS)
+      # -------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -------------------------------------------------
+      # PYTHON BASELINE
+      # -------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install script dependencies if present
+        run: |
+          if [ -f .github/scripts/requirements.txt ]; then
+            pip install -r .github/scripts/requirements.txt
+          fi
+
+      # -------------------------------------------------
+      # PYTHON PACKAGE NORMALIZATION (AUTHORITATIVE)
+      # -------------------------------------------------
+      - name: Enforce Python package integrity
+        run: |
+          set -e
+
+          REQUIRED_DIRS=(
+            "engine"
+            "engine/commands"
+            "engine/router"
+            "engine/self_improvement"
+            "engine/state"
+            "engine/trace"
+            "engine/utils"
+          )
+
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ -d "$dir" ] && [ ! -f "$dir/__init__.py" ]; then
+              echo "Adding missing __init__.py → $dir"
+              touch "$dir/__init__.py"
+            fi
+          done
+
+      # -------------------------------------------------
+      # EXECUTION MODE ENFORCEMENT (NO SCRIPT EXEC)
+      # -------------------------------------------------
+      - name: Enforce module-safe execution
+        run: |
+          set -e
+          if grep -R "python engine/bootstrap.py" -n .github/workflows; then
+            echo "::error::Direct script execution detected. Use python -m engine.bootstrap"
+            exit 1
+          fi
+
+      # -------------------------------------------------
+      # ANDROID SDK HARDENING (NO BUILD, NO BUILDOZER)
+      # -------------------------------------------------
+      - name: Install Android SDK + accept licenses
+        run: |
+          set -e
+
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd "$ANDROID_SDK_ROOT/cmdline-tools"
+
+          if [ ! -d latest ]; then
+            curl -s https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o tools.zip
+            unzip -q tools.zip
+            mv cmdline-tools latest
+          fi
+
+          yes | sdkmanager --licenses
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;36.1.0"
+
+          test -f "$ANDROID_SDK_ROOT/build-tools/36.1.0/aidl"
+
+      # -------------------------------------------------
+      # COMMIT NORMALIZATION (ONLY IF REQUIRED)
+      # -------------------------------------------------
+      - name: Commit finalizer fixes if any
+        run: |
+          if git status --porcelain | grep .; then
+            git config user.name "ntrli-finalizer-bot"
+            git config user.email "finalizer@ntrli.local"
+            git add .
+            git commit -m "finalize: enforce build-ready state"
+            git push
+          else
+            echo "Repository already build-ready."
+          fi
