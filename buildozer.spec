@@ -27,11 +27,7 @@ warn_on_root = 0
 # -----------------------------
 # CRITICAL: DO NOT USE 36.x
 # -----------------------------
-android.api = 33
-android.build_tools_version = 33.0.2
-android.ndk = 25.1.8937393
-android.minapi = 21
-android.sdk = 33
+
 
 android.permissions =
     INTERNET
@@ -44,9 +40,19 @@ android.gradle_dependencies =
 
 android.enable_androidx = True
 
+
+
 android.accept_sdk_license = True
 
 android.private_storage = True
+
+android.api = 33
+android.minapi = 21
+android.build_tools_version = 33.0.2
+android.ndk = 25b
+android.ndk_api = 21
+android.archs = arm64-v8a,armeabi-v7a
+android.skip_update = True
 
 android.logcat_filters = *:S python:D
 
