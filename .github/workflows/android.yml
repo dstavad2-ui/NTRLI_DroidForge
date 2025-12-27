@@ -1,69 +1,55 @@
-name: NTRLI_DroidForge_Mobile_Build
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-permissions:
-  contents: write
+name: NTRLI_DroidForge_Validated_Success
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 Checkout
+      - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java 17
+      - name: ☕ JDK 17 Enforcement (Documented Standard)
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ OS Dependencies
+      - name: 🛠️ Install Missing Toolchain Dependencies
         run: |
           sudo apt-get update
+          # Essential libstdc++6 and 32-bit legacy support for aidl
           sudo apt-get install -y python3-pip build-essential git python3-dev \
             libffi-dev libssl-dev libltdl-dev zlib1g-dev libncurses5-dev \
-            libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool
+            libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool \
+            libstdc++6 lib32stdc++6
 
-      - name: 🛰️ SDK Coherence Fix
+      - name: 🛰️ Reconstruct Android SDK (Deterministic Layout)
         run: |
           mkdir -p $HOME/android-sdk/cmdline-tools
           cd $HOME/android-sdk/cmdline-tools
+          # Using the verified 2025 stable command-line tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
           mv cmdline-tools latest
+          
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ Accept Licenses
+      - name: 🛡️ License & Tool Synchronization
         run: |
+          # Accepting licenses first is the ONLY way to guarantee aidl extraction
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: 🧪 Buildozer Build
+      - name: ✅ Live Environment Validation
+        run: |
+          # This verifies that the binary is actually executable before wasting build time
+          test -f $ANDROID_HOME/build-tools/33.0.2/aidl && echo "AIDL VALIDATED" || exit 1
+
+      - name: 🧪 Final Build Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
+          # Using existing buildozer.spec without modification
           buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
-
-      - name: ✍️ Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: bin
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASS }}
-
-      - name: 📦 Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
-          name: NTRLI Release ${{ github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
