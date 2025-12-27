@@ -20,21 +20,23 @@ jobs:
       PYTHONUNBUFFERED: 1
 
     steps:
-      # 1. Checkout source
-      - uses: actions/checkout@v4
+      # 1. Checkout the source
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      # 2. Python (Buildozer-compatible)
-      - uses: actions/setup-python@v5
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3. System dependencies required by python-for-android
+      # 3. Install required system dependencies
       - name: Install system dependencies
         run: |
-          sudo apt update
-          sudo apt install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             zip unzip \
             openjdk-17-jdk \
             libncurses5 \
@@ -42,37 +44,39 @@ jobs:
             zlib1g-dev \
             libffi-dev \
             libssl-dev \
-            liblzma-dev \
             cmake \
             pkg-config
 
-      # 4. Restore PATH correctly (runtime, not env)
+      # 4. Restore Android PATH for this runner
       - name: Restore Android PATH
         run: |
           export PATH="/usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
           echo "PATH=$PATH" >> $GITHUB_ENV
           java -version
+          sdkmanager --version || true
 
-      # 5. Python build tooling
-      - name: Install Python build tools
+      # 5. Install Buildozer and Python dependencies
+      - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython virtualenv
 
-      # 6. Build APK (cold-run safe, no clean)
-      - name: Build APK
+      # 6. Build the APK
+      - name: Build APK with Buildozer
         run: |
           buildozer android debug
 
-      # 7. Verify output
-      - name: Verify APK
+      # 7. Verify that an APK was generated
+      - name: Verify APK output
         run: |
+          echo "Listing APK output directory:"
           ls -lah bin
           test -f bin/*.apk
 
-      # 8. Upload artifact
-      - uses: actions/upload-artifact@v4
+      # 8. Upload the APK artifact
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: ntrli-apk
+          name: ntrli-debug-apk
           path: bin/*.apk
           retention-days: 7
