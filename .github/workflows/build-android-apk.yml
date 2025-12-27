@@ -1,90 +1,64 @@
-name: Build & Sign Android Release
+name: NTRLI_DroidForge Android Build
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-and-sign:
+  build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    env:
-      ANDROID_SDK_ROOT: /home/runner/android-sdk
-      ANDROID_HOME: /home/runner/android-sdk
-      PYTHONUNBUFFERED: 1
-
     steps:
-      # 1. Setup Environment
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Setup Java 17 (Required for Android SDK)
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Install System Dependencies
+      - name: Install Android Toolchain Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip curl libncurses5 libstdc++6 zlib1g-dev libffi-dev libssl-dev cmake
+          sudo apt-get install -y \
+            python3-pip build-essential git python3-dev \
+            libffi-dev libssl-dev libltdl-dev zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 \
+            cmake zip unzip ant autoconf libtool
 
-      # 2. Bootstrap Android SDK (The Critical Fix)
-      - name: Install Android Command-line Tools
+      - name: Deterministic SDK Layout (Fixing cmdline-tools)
         run: |
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          cd /tmp
-          # Downloading latest command-line tools
-          curl -L -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdline.zip
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-          mv cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip commandlinetools-linux-*.zip
+          mv cmdline-tools latest # Enforces the /latest/ layout required by sdkmanager
 
-      - name: Configure PATH and Accept Licenses
+      - name: Set Environment & Path
         run: |
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/build-tools/33.0.2" >> $GITHUB_PATH
-          
-          # Explicitly accept licenses to prevent build hangs
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: Install Target SDK and Build Tools
+      - name: Accept Licenses & Install SDK Packages
         run: |
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653" "platform-tools"
 
-      # 3. Build the Unsigned APK
-      - name: Install Buildozer
+      - name: Verify AIDL Persistence
         run: |
-          pip install --upgrade pip setuptools wheel
-          pip install buildozer cython virtualenv
+          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
+            echo "AIDL missing! License acceptance failed." && exit 1
+          fi
 
-      - name: Build Release APK (Unsigned)
-        run: buildozer android release
-        env:
-          # Force accept license in buildozer scope as safety net
-          PACKAGES_PATH: ${{ env.ANDROID_SDK_ROOT }}
+      - name: Build with Buildozer
+        run: |
+          pip3 install --user --upgrade buildozer
+          # Ensure 'android.skip_update = True' is in your buildozer.spec
+          buildozer android release
 
-      # 4. Sign the APK (The Production Fix)
-      - name: Sign APK
-        id: sign_app
-        uses: r0adkll/sign-android-release@v1
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          releaseDirectory: bin
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        continue-on-error: false
-
-      # 5. Upload Final Artifact
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NTRLI-DroidForge-Signed
-          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
+          name: NTRLI-DroidForge-Release
+          path: bin/*.apk
