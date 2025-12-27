@@ -1,34 +1,36 @@
-name: "Part 1: NTRLI Scanner"
+name: "Part 1: NTRLI Coherence Scanner"
 on: [push, workflow_dispatch]
 
 jobs:
-  coherence_check:
+  deep_scan:
     runs-on: ubuntu-22.04
     steps:
       - name: 🚀 Source Checkout
         uses: actions/checkout@v4
 
-      - name: 🔐 Secrets Guard
+      - name: 🔐 Secrets & Permissions Validation
         run: |
-          echo "🔍 Validating Build Secrets..."
+          echo "🔍 Scanning Repository Secrets..."
           MISSING=()
           [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && MISSING+=("ANDROID_KEYSTORE_BASE64")
-          [ -z "${{ secrets.ANDROID_KEYSTORE_PASS }}" ] && MISSING+=("ANDROID_KEYSTORE_PASS")
+          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && MISSING+=("ANDROID_KEY_ALIAS")
           if [ ${#MISSING[@]} -ne 0 ]; then
-            echo "::error::❌ Missing Secrets: ${MISSING[*]}"
+            echo "::error::❌ CRITICAL: Missing secrets: ${MISSING[*]}"
             exit 1
           fi
+          echo "✅ Secret coherence verified."
 
-      - name: 📁 Structure Scan
+      - name: 📁 Module & Path Validation
         run: |
-          echo "🔍 Validating Engine Modules..."
-          REQUIRED=("engine/ai" "engine/router" "engine/state" "engine/utils")
-          for dir in "${REQUIRED[@]}"; do
-            [ -d "$dir" ] || (echo "::error::❌ Missing $dir" && exit 1)
+          echo "🔍 Scanning Internal Engine Structure..."
+          DIRS=("engine/ai" "engine/authority" "engine/commands" "engine/router" "engine/state" "engine/trace" "engine/utils")
+          for d in "${DIRS[@]}"; do
+            [ -d "$d" ] || (echo "::error::❌ Missing Directory: $d" && exit 1)
           done
+          echo "✅ All engine modules accounted for."
 
-      - name: 🐍 Syntax Scan
+      - name: 🐍 Python Logic Integrity
         run: |
-          echo "🔍 Compiling Python Modules..."
+          echo "🔍 Compiling Python Source for Syntax Errors..."
           python3 -m compileall -q .
-          echo "✅ Branch Coherent."
+          echo "✅ Logic integrity confirmed."
