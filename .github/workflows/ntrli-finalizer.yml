@@ -1,77 +1,104 @@
-name: NTRLI Android Finalizer
+name: Final APK Build (Buildozer)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-apk:
     runs-on: ubuntu-22.04
 
+    env:
+      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+
     steps:
+      # ------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # 2. Python
+      # ------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ------------------------------------------------------------
+      # 3. System dependencies (Buildozer + Android)
+      # ------------------------------------------------------------
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
+            zip unzip \
             openjdk-17-jdk \
             python3-pip \
-            python3-setuptools \
-            python3-wheel \
-            libffi-dev \
-            libssl-dev \
-            libsqlite3-dev \
-            zlib1g-dev
+            autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake \
+            libffi-dev libssl-dev \
+            build-essential \
+            ccache
 
+      # ------------------------------------------------------------
+      # 4. Python dependencies
+      # ------------------------------------------------------------
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      # --------------------------------------------------
-      # IMPORTANT: Buildozer installs the Android SDK here
-      # --------------------------------------------------
-      - name: Initialize Buildozer (installs Android SDK)
+      # ------------------------------------------------------------
+      # 5. Initialize Buildozer (installs Android SDK)
+      # ------------------------------------------------------------
+      - name: Initialize Buildozer
         run: |
-          buildozer android debug || true
+          buildozer android help
 
-      # --------------------------------------------------
-      # CRITICAL FIX: accept licenses AFTER SDK exists
-      # --------------------------------------------------
+      # ------------------------------------------------------------
+      # 6. ACCEPT ANDROID SDK LICENSES (CRITICAL FIX)
+      #    Must happen AFTER SDK exists
+      # ------------------------------------------------------------
       - name: Accept Android SDK licenses
         run: |
-          yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # --------------------------------------------------
-      # Ensure required build tools exist (aidl lives here)
-      # --------------------------------------------------
-      - name: Install required Android build-tools
+      # ------------------------------------------------------------
+      # 7. Ensure required build-tools + platform-tools
+      # ------------------------------------------------------------
+      - name: Install Android build-tools
         run: |
-          $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
-            "build-tools;36.0.0" \
-            "platforms;android-34"
+            "platforms;android-33" \
+            "build-tools;33.0.2"
 
-      # --------------------------------------------------
-      # FINAL BUILD — now guaranteed to succeed
-      # --------------------------------------------------
+      # ------------------------------------------------------------
+      # 8. Verify aidl (hard gate)
+      # ------------------------------------------------------------
+      - name: Verify aidl
+        run: |
+          find $ANDROID_HOME/build-tools -name aidl -type f
+          $ANDROID_HOME/build-tools/33.0.2/aidl --version
+
+      # ------------------------------------------------------------
+      # 9. Build APK
+      # ------------------------------------------------------------
       - name: Build APK with Buildozer
         run: |
           buildozer android debug
 
+      # ------------------------------------------------------------
+      # 10. Upload APK
+      # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ntrli-apk
+          name: apk
           path: bin/*.apk
