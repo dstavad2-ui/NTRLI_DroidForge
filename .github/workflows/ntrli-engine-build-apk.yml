@@ -1,0 +1,83 @@
+name: NTRLI Engine – Build APK & Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 1. Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. System deps for Android / Buildozer
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            zip unzip git \
+            openjdk-17-jdk \
+            build-essential \
+            libffi-dev libssl-dev \
+            libjpeg-dev zlib1g-dev \
+            python3-pip \
+            autoconf automake libtool \
+            pkg-config
+
+      # 4. Python deps
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer cython
+          if [ -f .github/scripts/requirements.txt ]; then
+            pip install -r .github/scripts/requirements.txt
+          fi
+
+      # 5. Accept Android licenses (non-interactive)
+      - name: Accept Android SDK licenses
+        run: |
+          mkdir -p $HOME/.android
+          yes | sdkmanager --licenses || true
+
+      # 6. Run NTRLI Engine (validated earlier)
+      - name: Run NTRLI Engine
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m engine.bootstrap
+
+      # 7. Build APK
+      - name: Build APK with Buildozer
+        run: |
+          buildozer android debug
+
+      # 8. Locate APK
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(ls bin/*.apk | head -n 1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+
+      # 9. Create GitHub Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ntrli-apk-${{ github.run_number }}
+          name: NTRLI DroidForge APK ${{ github.run_number }}
+          files: ${{ steps.apk.outputs.apk_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
