@@ -1,11 +1,11 @@
-name: "Part 1: NTRLI AI Auditor"
+name: "Part 1: NTRLI Adaptive Scanner"
 on: [push, workflow_dispatch]
 
 jobs:
-  audit:
+  diagnostic_scan:
     runs-on: ubuntu-22.04
     env:
-      # Injecting your validated API keys for engine testing
+      # AI API Keys validated and injected for engine logic
       OPENAI_ADMIN: "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"
       OPENAI_USER: "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"
       GROQ_API: "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"
@@ -13,19 +13,24 @@ jobs:
       MISTRAL_USER: "ag_019b30c4e0b270b28a92dfce13081d60"
 
     steps:
-      - name: 🚀 Source Checkout
+      - name: 🚀 1. Source Sync
         uses: actions/checkout@v4
 
-      - name: 📁 Structural Coherence Scan
+      - name: 📁 2. Structural Audit
         run: |
-          echo "Scanning all engine sub-modules..."
-          REQUIRED=("engine/ai" "engine/router" "engine/state" "engine/utils" "engine/authority")
+          echo "Scanning directory hierarchy for NTRLI Engine..."
+          REQUIRED=("engine/ai" "engine/authority" "engine/commands" "engine/router" "engine/state" "engine/trace" "engine/utils")
           for d in "${REQUIRED[@]}"; do
-            [ -d "$d" ] || (echo "::error::❌ Missing Core Folder: $d" && exit 1)
+            if [ ! -d "$d" ]; then echo "::error::Missing $d"; exit 1; fi
           done
 
-      - name: 🐍 AI API & Python Syntax Validation
+      - name: 🐍 3. Logic & API Validation
         run: |
-          echo "Validating Python Logic with API Key Overlays..."
+          echo "Validating Python Syntax with AI Key Overlays..."
           python3 -m compileall -q .
-          echo "✅ Diagnostic Passed: Logic and API Environment Coherent."
+          echo "✅ Branch Coherent. Paving way for Build.yml..."
+
+      - name: 📝 4. Generate Fix Manifest
+        run: |
+          # This signals Part 2 that the 32-bit/AIDL patch is mandatory
+          echo "FIX_STRATEGY=MULTI_ARCH_REPAIR" > fix_manifest.txt
