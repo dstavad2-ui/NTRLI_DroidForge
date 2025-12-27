@@ -1,0 +1,41 @@
+name: NTRLI Finalizer – Part 1 (Android SDK Bootstrap)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  sdk-bootstrap:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    env:
+      ANDROID_SDK_ROOT: /home/runner/android-sdk
+      ANDROID_HOME: /home/runner/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      PATH: /usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+
+    steps:
+      - name: Install base system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            tar unzip zip curl wget \
+            openjdk-17-jdk
+
+      - name: Create Android SDK root
+        run: |
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+
+      - name: Download Android command line tools (official)
+        run: |
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+
+      - name: Verify sdkmanager exists
+        run: |
+          ls -lah "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --version
