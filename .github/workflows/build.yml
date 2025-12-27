@@ -1,0 +1,70 @@
+name: "Part 2: NTRLI APK Forge"
+on:
+  workflow_run:
+    workflows: ["Part 1: NTRLI Coherence Scanner"]
+    types: [completed]
+
+jobs:
+  forge_apk:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      # Defaulting to 123 as requested
+      KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
+      KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
+
+    steps:
+      - name: 🚀 Source Sync
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Toolchain Patch (Aidl Execution Fix)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
+            python3-pip build-essential cmake zip unzip libncurses5:i386
+
+      - name: 🛰️ SDK Reconstruction (The Latest Fix)
+        run: |
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip *.zip
+          mv cmdline-tools latest
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+
+      - name: 🛡️ License & Platform Extraction
+        run: |
+          yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
+          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
+
+      - name: ✅ Final Integrity Verification
+        run: |
+          # This ensures the binary is actually runnable by the system
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version
+
+      - name: 🧪 Buildozer Immutable Run
+        run: |
+          pip3 install --user --upgrade buildozer cython==0.29.33
+          buildozer -v android release
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: ✍️ Sign APK (Will use dummy 123 if real secrets missing)
+        continue-on-error: true
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: bin
+          signingKeyBase64: ${{ env.KEY_B64 }}
+          alias: "123"
+          keyStorePassword: ${{ env.KEY_PASS }}
+          keyPassword: ${{ env.KEY_PASS }}
+
+      - name: 📦 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI-DroidForge-APK
+          path: bin/*.apk
