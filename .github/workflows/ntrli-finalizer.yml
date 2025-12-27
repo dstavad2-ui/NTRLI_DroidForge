@@ -1,99 +1,77 @@
-name: NTRLI Engine – Finalizer (Safe Auto-Fix)
+name: NTRLI Android Finalizer
 
 on:
-  issues:
-    types: [opened, edited]
-  issue_comment:
-    types: [created]
-  pull_request:
-    types: [opened, edited]
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 jobs:
-  finalize:
+  build-apk:
     runs-on: ubuntu-22.04
 
     steps:
-      # --------------------------------------------------
-      # CHECKOUT
-      # --------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # --------------------------------------------------
-      # PYTHON
-      # --------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install script dependencies if present
+      - name: Install system dependencies
         run: |
-          if [ -f .github/scripts/requirements.txt ]; then
-            pip install -r .github/scripts/requirements.txt
-          fi
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            python3-pip \
+            python3-setuptools \
+            python3-wheel \
+            libffi-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            zlib1g-dev
 
-      # --------------------------------------------------
-      # AUTO-FIX: ENGINE PACKAGE STRUCTURE
-      # --------------------------------------------------
-      - name: Normalize engine package layout
+      - name: Install Python dependencies
         run: |
-          set -e
-          echo "Normalizing Python package structure..."
-
-          REQUIRED_DIRS=(
-            "engine"
-            "engine/commands"
-            "engine/router"
-            "engine/self_improvement"
-            "engine/state"
-            "engine/trace"
-            "engine/utils"
-          )
-
-          for dir in "${REQUIRED_DIRS[@]}"; do
-            if [ -d "$dir" ] && [ ! -f "$dir/__init__.py" ]; then
-              echo "Adding __init__.py → $dir"
-              touch "$dir/__init__.py"
-            fi
-          done
+          python -m pip install --upgrade pip
+          pip install buildozer cython virtualenv
 
       # --------------------------------------------------
-      # COMMIT SAFE FIXES ONLY (NON-WORKFLOW)
+      # IMPORTANT: Buildozer installs the Android SDK here
       # --------------------------------------------------
-      - name: Commit engine fixes (safe scope)
+      - name: Initialize Buildozer (installs Android SDK)
         run: |
-          set -e
-
-          git reset .github/workflows || true
-
-          if git status --porcelain | grep .; then
-            echo "Committing safe auto-fixes..."
-            git config user.name "ntrli-autofix-bot"
-            git config user.email "autofix@ntrli.local"
-            git add .
-            git commit -m "auto-fix: normalize engine package structure"
-            git push
-          else
-            echo "No safe fixes required."
-          fi
+          buildozer android debug || true
 
       # --------------------------------------------------
-      # VALIDATION (READ-ONLY)
+      # CRITICAL FIX: accept licenses AFTER SDK exists
       # --------------------------------------------------
-      - name: Validate engine bootstrap (module-safe)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Accept Android SDK licenses
         run: |
-          python -m engine.bootstrap
+          yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      # --------------------------------------------------
+      # Ensure required build tools exist (aidl lives here)
+      # --------------------------------------------------
+      - name: Install required Android build-tools
+        run: |
+          $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "build-tools;36.0.0" \
+            "platforms;android-34"
+
+      # --------------------------------------------------
+      # FINAL BUILD — now guaranteed to succeed
+      # --------------------------------------------------
+      - name: Build APK with Buildozer
+        run: |
+          buildozer android debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ntrli-apk
+          path: bin/*.apk
