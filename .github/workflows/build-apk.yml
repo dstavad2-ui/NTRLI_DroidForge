@@ -1,54 +1,25 @@
-name: NTRLI_DroidForge_Perfected_CI
-on: [push, workflow_dispatch]
+name: "Part 2: NTRLI APK Build"
+on:
+  workflow_run:
+    workflows: ["Part 1: NTRLI Scanner"]
+    types: [completed]
+    branches: [main]
 
 jobs:
-  validate_and_build:
+  generate_apk:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 1. Source Checkout
+      - name: 🚀 Checkout
         uses: actions/checkout@v4
 
-      - name: 🔐 2. Secrets Integrity Check
-        shell: bash
+      - name: 🛠️ Toolchain Patch (Aidl Fix)
         run: |
-          echo "🔍 Checking for required GitHub Secrets..."
-          MISSING_SECRETS=()
-          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && MISSING_SECRETS+=("ANDROID_KEYSTORE_BASE64")
-          [ -z "${{ secrets.ANDROID_KEYSTORE_PASS }}" ] && MISSING_SECRETS+=("ANDROID_KEYSTORE_PASS")
-          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && MISSING_SECRETS+=("ANDROID_KEY_ALIAS")
-          [ -z "${{ secrets.ANDROID_KEY_PASS }}" ] && MISSING_SECRETS+=("ANDROID_KEY_PASS")
+          sudo apt-get update
+          sudo apt-get install -y python3-pip build-essential libstdc++6 lib32z1 lib32stdc++6 cmake zip unzip
+          pip3 install --user --upgrade buildozer cython==0.29.33
 
-          if [ ${#MISSING_SECRETS[@]} -ne 0 ]; then
-            echo "::error::❌ CRITICAL: The following secrets are missing: ${MISSING_SECRETS[*]}"
-            exit 1
-          fi
-          echo "✅ All signing secrets are present."
-
-      - name: 📁 3. Engine Folder Validation
-        run: |
-          echo "🔍 Scanning engine directory structure..."
-          REQUIRED_DIRS=("engine/ai" "engine/authority" "engine/commands" "engine/router" "engine/state" "engine/trace" "engine/utils")
-          for dir in "${REQUIRED_DIRS[@]}"; do
-            if [ ! -d "$dir" ]; then
-              echo "::error::❌ Missing directory: $dir"
-              exit 1
-            fi
-          done
-          echo "✅ Repository folder structure is coherent."
-
-      - name: 🐍 4. Python Syntax Coherence Scan
-        run: |
-          echo "🔍 Scanning for Python syntax errors..."
-          python3 -m compileall -q .
-          echo "✅ No syntax errors found in current branch."
-
-      - name: ☕ 5. Java 17 Enforcement
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: 🛰️ 6. SDK Layout Reconstruction
+      - name: 🛰️ SDK Reconstruction
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
@@ -57,23 +28,19 @@ jobs:
           unzip *.zip
           mv cmdline-tools latest
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - name: 🛡️ 7. License & Aidl Setup
+      - name: 🛡️ License & Extraction
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libstdc++6 lib32z1 lib32stdc++6
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: 🧪 8. Validated Buildozer Build
-        run: |
-          pip3 install --user --upgrade buildozer cython==0.29.33
-          buildozer -v android release
+      - name: 🧪 Buildozer Release
+        run: buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: ✍️ 9. Automated Signing
+      - name: ✍️ Sign & Artifact
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         with:
@@ -83,8 +50,8 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASS }}
 
-      - name: 📦 10. APK Artifact
+      - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-Perfected-APK
+          name: NTRLI-Final-Build
           path: ${{ steps.sign_app.outputs.signedReleaseFile }}
