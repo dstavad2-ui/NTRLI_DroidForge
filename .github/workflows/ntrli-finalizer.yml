@@ -1,4 +1,4 @@
-name: NTRLI Engine – Finalizer (Auto-Fix + Normalize)
+name: NTRLI Engine – Finalizer (Safe Auto-Fix)
 
 on:
   issues:
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       # --------------------------------------------------
-      # PYTHON SETUP
+      # PYTHON
       # --------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,12 +45,12 @@ jobs:
           fi
 
       # --------------------------------------------------
-      # AUTO-FIX: PYTHON PACKAGE NORMALIZATION
+      # AUTO-FIX: ENGINE PACKAGE STRUCTURE
       # --------------------------------------------------
-      - name: Ensure engine is a valid Python package
+      - name: Normalize engine package layout
         run: |
           set -e
-          echo "Validating Python package structure..."
+          echo "Normalizing Python package structure..."
 
           REQUIRED_DIRS=(
             "engine"
@@ -64,44 +64,33 @@ jobs:
 
           for dir in "${REQUIRED_DIRS[@]}"; do
             if [ -d "$dir" ] && [ ! -f "$dir/__init__.py" ]; then
-              echo "Adding missing __init__.py → $dir"
+              echo "Adding __init__.py → $dir"
               touch "$dir/__init__.py"
             fi
           done
 
       # --------------------------------------------------
-      # AUTO-FIX: INVALID WORKFLOW EXECUTION
+      # COMMIT SAFE FIXES ONLY (NON-WORKFLOW)
       # --------------------------------------------------
-      - name: Normalize workflow Python execution
+      - name: Commit engine fixes (safe scope)
         run: |
           set -e
-          echo "Normalizing workflow execution patterns..."
 
-          for file in .github/workflows/*.yml; do
-            if grep -q "python engine/bootstrap.py" "$file"; then
-              echo "Fixing execution pattern in $file"
-              sed -i 's|python engine/bootstrap.py|python -m engine.bootstrap|g' "$file"
-            fi
-          done
+          git reset .github/workflows || true
 
-      # --------------------------------------------------
-      # AUTO-COMMIT FIXES (IF ANY)
-      # --------------------------------------------------
-      - name: Commit auto-fixes if required
-        run: |
           if git status --porcelain | grep .; then
-            echo "Auto-fixes detected. Committing..."
+            echo "Committing safe auto-fixes..."
             git config user.name "ntrli-autofix-bot"
             git config user.email "autofix@ntrli.local"
             git add .
-            git commit -m "auto-fix: normalize engine packaging and execution"
+            git commit -m "auto-fix: normalize engine package structure"
             git push
           else
-            echo "No fixes required."
+            echo "No safe fixes required."
           fi
 
       # --------------------------------------------------
-      # SAFE EXECUTION VALIDATION
+      # VALIDATION (READ-ONLY)
       # --------------------------------------------------
       - name: Validate engine bootstrap (module-safe)
         env:
