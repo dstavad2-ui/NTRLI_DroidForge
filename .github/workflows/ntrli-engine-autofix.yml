@@ -1,4 +1,4 @@
-name: NTRLI Engine (Auto-Fix + Run)
+name: NTRLI Engine (Auto-Fix + Run + APK)
 
 on:
   issues:
@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      # ------------------------------------------------
+      # BASE ENV
+      # ------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -36,10 +39,9 @@ jobs:
             pip install -r .github/scripts/requirements.txt
           fi
 
-      # ---------------------------------------------
-      # AUTO-FIX PHASE (NO USER INTERACTION)
-      # ---------------------------------------------
-
+      # ------------------------------------------------
+      # AUTO-FIX: PYTHON STRUCTURE
+      # ------------------------------------------------
       - name: Ensure engine is a valid Python package
         run: |
           set -e
@@ -56,43 +58,91 @@ jobs:
           )
 
           for dir in "${REQUIRED_DIRS[@]}"; do
-            if [ -d "$dir" ]; then
-              if [ ! -f "$dir/__init__.py" ]; then
-                echo "Fixing missing __init__.py in $dir"
-                touch "$dir/__init__.py"
-              fi
+            if [ -d "$dir" ] && [ ! -f "$dir/__init__.py" ]; then
+              echo "Fixing missing __init__.py in $dir"
+              touch "$dir/__init__.py"
             fi
           done
-
-      - name: Auto-detect broken script execution patterns
-        run: |
-          set -e
-          echo "Scanning for invalid Python execution..."
-
-          if grep -R "python engine/bootstrap.py" -n .github/workflows; then
-            echo "Invalid script execution detected."
-            echo "This workflow enforces module execution automatically."
-          fi
 
       - name: Commit auto-fixes if any
         run: |
           if git status --porcelain | grep .; then
-            echo "Auto-fixes detected. Committing..."
             git config user.name "ntrli-autofix-bot"
             git config user.email "autofix@ntrli.local"
             git add .
             git commit -m "auto-fix: normalize Python package execution"
             git push
-          else
-            echo "No fixes required."
           fi
 
-      # ---------------------------------------------
-      # EXECUTION PHASE (SAFE MODE)
-      # ---------------------------------------------
+      # ------------------------------------------------
+      # AUTO-FIX: ANDROID TOOLCHAIN (CRITICAL ADDITION)
+      # ------------------------------------------------
+      - name: Install system dependencies for Android
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            zip unzip openjdk-17-jdk \
+            libffi-dev libssl-dev \
+            autoconf automake libtool pkg-config
 
+      - name: Install Android SDK cmdline-tools (AUTOFIX)
+        run: |
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools cmdline-tools/latest
+
+      - name: Configure Android SDK environment
+        run: |
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Accept Android SDK licenses (NON-INTERACTIVE)
+        run: |
+          yes | sdkmanager --licenses
+
+      - name: Install required Android SDK packages
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653"
+
+      # ------------------------------------------------
+      # EXECUTION PHASE (ENGINE)
+      # ------------------------------------------------
       - name: Run NTRLI Engine (module-safe)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python -m engine.bootstrap
+
+      # ------------------------------------------------
+      # APK BUILD + GUARDED RELEASE
+      # ------------------------------------------------
+      - name: Install Buildozer
+        run: |
+          pip install buildozer cython
+
+      - name: Build APK
+        run: |
+          buildozer android debug
+
+      - name: Verify APK exists (HARD FAIL)
+        run: |
+          if ! ls bin/*.apk 1> /dev/null 2>&1; then
+            echo "ERROR: APK not produced"
+            exit 1
+          fi
+
+      - name: Publish APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ntrli-apk-${{ github.run_number }}
+          name: NTRLI APK Build ${{ github.run_number }}
+          files: bin/*.apk
