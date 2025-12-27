@@ -1,55 +1,58 @@
-name: NTRLI_DroidForge_Validated_Success
+name: NTRLI_DroidForge_Validated_Production
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 Source Sync
+      - name: 🚀 Source Scan & Sync
         uses: actions/checkout@v4
 
-      - name: ☕ JDK 17 Enforcement (Documented Standard)
+      - name: ☕ JDK 17 Enforcement
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ Install Missing Toolchain Dependencies
+      - name: 🛠️ System Dependency Validation
         run: |
           sudo apt-get update
-          # Essential libstdc++6 and 32-bit legacy support for aidl
+          # Documented fix for aidl/build-tools crashes on Ubuntu 22.04
           sudo apt-get install -y python3-pip build-essential git python3-dev \
             libffi-dev libssl-dev libltdl-dev zlib1g-dev libncurses5-dev \
             libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool \
             libstdc++6 lib32stdc++6
 
-      - name: 🛰️ Reconstruct Android SDK (Deterministic Layout)
+      - name: 🛰️ SDK Reconstruction (The "Latest" Nesting Fix)
         run: |
           mkdir -p $HOME/android-sdk/cmdline-tools
           cd $HOME/android-sdk/cmdline-tools
-          # Using the verified 2025 stable command-line tools
+          # Verified 2025-Stable CLI Tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
-          mv cmdline-tools latest
+          mv cmdline-tools latest # MUST be inside a 'latest' folder for sdkmanager
           
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Tool Synchronization
+      - name: 🛡️ License & Binary Synchronization
         run: |
-          # Accepting licenses first is the ONLY way to guarantee aidl extraction
+          # Accepting licenses first is the only way to ensure 'aidl' is extracted correctly
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: ✅ Live Environment Validation
+      - name: ✅ Environment Coherence Check
         run: |
-          # This verifies that the binary is actually executable before wasting build time
-          test -f $ANDROID_HOME/build-tools/33.0.2/aidl && echo "AIDL VALIDATED" || exit 1
+          # Validation check to ensure the toolchain is executable
+          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
+            echo "COHERENCE FAILED: AIDL missing." && exit 1
+          fi
+          echo "COHERENCE SUCCESS: Environment ready."
 
-      - name: 🧪 Final Build Execution
+      - name: 🧪 Final APK Generation
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          # Using existing buildozer.spec without modification
+          # Using your existing .spec but forcing the validated SDK path
           buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
