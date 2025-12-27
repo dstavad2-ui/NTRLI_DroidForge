@@ -1,9 +1,10 @@
-name: Build Android APK (NTRLI)
+name: Full Android Build (NTRLI)
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
@@ -16,76 +17,56 @@ jobs:
       PYTHONUNBUFFERED: 1
 
     steps:
-      # ─────────────────────────────────────────────
-      # 1. Checkout
-      # ─────────────────────────────────────────────
+      # 1) Checkout source
       - uses: actions/checkout@v4
 
-      # ─────────────────────────────────────────────
-      # 2. Python
-      # ─────────────────────────────────────────────
+      # 2) Python setup
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ─────────────────────────────────────────────
-      # 3. FORCE Java 17 (this is critical)
-      # ─────────────────────────────────────────────
+      # 3) Java 17 setup (essential)
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ─────────────────────────────────────────────
-      # 4. System dependencies
-      # ─────────────────────────────────────────────
-      - name: Install system packages
+      # 4) Install OS packages
+      - name: Install system dependencies
         run: |
-          sudo apt update
-          sudo apt install -y \
-            zip unzip \
-            libncurses5 \
-            libstdc++6 \
-            zlib1g-dev \
-            libffi-dev \
-            libssl-dev \
-            cmake \
-            pkg-config
+          sudo apt-get update
+          sudo apt-get install -y \
+            zip unzip curl wget \
+            libncurses5 libstdc++6 \
+            zlib1g-dev libffi-dev libssl-dev \
+            cmake pkg-config
 
-      # ─────────────────────────────────────────────
-      # 5. Android SDK cmdline-tools (CORRECT LAYOUT)
-      # ─────────────────────────────────────────────
-      - name: Install Android cmdline-tools
+      # 5) Android cmdline-tools install
+      - name: Install Android SDK command-line tools
         run: |
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd /tmp
-          curl -L -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          curl -L -o cmdline.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline.zip
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           mv cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-      # ─────────────────────────────────────────────
-      # 6. PATH + verification
-      # ─────────────────────────────────────────────
-      - name: Configure Android environment
+      # 6) Configure PATH for Android tools
+      - name: Configure Android PATH
         run: |
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
           java -version
-          ls -lah "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin"
           sdkmanager --version
 
-      # ─────────────────────────────────────────────
-      # 7. Accept licenses
-      # ─────────────────────────────────────────────
-      - name: Accept Android licenses
+      # 7) Accept Android SDK licenses
+      - name: Accept SDK licenses
         run: |
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
 
-      # ─────────────────────────────────────────────
-      # 8. Install required SDK packages
-      # ─────────────────────────────────────────────
+      # 8) Install required Android packages
       - name: Install Android SDK packages
         run: |
           sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
@@ -93,41 +74,32 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      # ─────────────────────────────────────────────
-      # 9. Verify AIDL exists (hard requirement)
-      # ─────────────────────────────────────────────
-      - name: Verify build tools
+      # 9) Verify aidl presence
+      - name: Verify build-tools AIDL
         run: |
           test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl"
           "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
 
-      # ─────────────────────────────────────────────
-      # 10. Python build tooling
-      # ─────────────────────────────────────────────
-      - name: Install Buildozer
+      # 10) Install Buildozer + Python deps
+      - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython virtualenv
 
-      # ─────────────────────────────────────────────
-      # 11. Build APK
-      # ─────────────────────────────────────────────
-      - name: Build APK
+      # 11) Build APK
+      - name: Build the APK
         run: |
           buildozer android debug
 
-      # ─────────────────────────────────────────────
-      # 12. Verify output
-      # ─────────────────────────────────────────────
-      - name: Verify APK
+      # 12) Output verification
+      - name: Verify APK output
         run: |
           ls -lah bin
           test -f bin/*.apk
 
-      # ─────────────────────────────────────────────
-      # 13. Upload artifact
-      # ─────────────────────────────────────────────
-      - uses: actions/upload-artifact@v4
+      # 13) Upload build artifact
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: ntrli-apk
+          name: android-apk
           path: bin/*.apk
