@@ -1,89 +1,90 @@
-name: Build Android APK (NTRLI Full Workflow)
-
+name: Build & Sign Android Release
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-sign:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
-
+    timeout-minutes: 45
     env:
       ANDROID_SDK_ROOT: /home/runner/android-sdk
       ANDROID_HOME: /home/runner/android-sdk
       PYTHONUNBUFFERED: 1
 
     steps:
+      # 1. Setup Environment
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Setup Java 17
+      - name: Setup Java 17 (Required for Android SDK)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Install system dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip curl wget \
-            libncurses5 libstdc++6 zlib1g-dev \
-            libffi-dev libssl-dev cmake pkg-config
+          sudo apt-get install -y zip unzip curl libncurses5 libstdc++6 zlib1g-dev libffi-dev libssl-dev cmake
 
-      - name: Install Android cmdline-tools
+      # 2. Bootstrap Android SDK (The Critical Fix)
+      - name: Install Android Command-line Tools
         run: |
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd /tmp
-          curl -L -o cmdline.zip \
-            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          # Downloading latest command-line tools
+          curl -L -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline.zip
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           mv cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-      - name: Configure Android PATH
+      - name: Configure PATH and Accept Licenses
         run: |
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-          java -version
-          sdkmanager --version
+          echo "$ANDROID_SDK_ROOT/build-tools/33.0.2" >> $GITHUB_PATH
+          
+          # Explicitly accept licenses to prevent build hangs
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT"
 
-      - name: Accept Android SDK licenses
+      - name: Install Target SDK and Build Tools
         run: |
-          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      - name: Verify aidl
+      # 3. Build the Unsigned APK
+      - name: Install Buildozer
         run: |
-          ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
-          "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer cython virtualenv
 
-      - name: Install Buildozer and deps
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install buildozer cython virtualenv
+      - name: Build Release APK (Unsigned)
+        run: buildozer android release
+        env:
+          # Force accept license in buildozer scope as safety net
+          PACKAGES_PATH: ${{ env.ANDROID_SDK_ROOT }}
 
-      - name: Build APK
-        run: |
-          buildozer android debug
-
-      - name: Verify APK output
-        run: |
-          ls -lah bin
-          test -f bin/*.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      # 4. Sign the APK (The Production Fix)
+      - name: Sign APK
+        id: sign_app
+        uses: r0adkll/sign-android-release@v1
         with:
-          name: ntrli-apk
-          path: bin/*.apk
+          releaseDirectory: bin
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        continue-on-error: false
+
+      # 5. Upload Final Artifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI-DroidForge-Signed
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
