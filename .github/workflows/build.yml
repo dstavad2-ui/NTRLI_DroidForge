@@ -5,28 +5,30 @@ on:
     types: [completed]
 
 jobs:
-  autonomous_build:
+  forge:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # Self-correcting dummy secrets
+      # AI API Secret Injection
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '123' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '123' }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || '123' }}
+      # Signing Defaults
       KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
-      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || '123' }}
 
     steps:
-      - name: 🚀 Branch Sync
+      - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: 🩹 Automated Patching (Multi-Arch)
+      - name: 🩹 Automated Patching (Aidl/32-bit Fix)
         run: |
-          echo "Autonomously applying 32-bit execution patch..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
-            cmake zip unzip libncurses5:i386
+            python3-pip build-essential cmake zip unzip
 
-      - name: 🛰️ SDK Autonomy (Nesting Standard)
+      - name: 🛰️ SDK Reconstruction
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
@@ -36,22 +38,25 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Binary Verification
+      - name: ✅ Verify Toolchain
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
-          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
-          # Autonomous Test: If aidl doesn't run, the workflow fails immediately here
+          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
       - name: 🧪 Buildozer Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
+          # Passing AI keys into the build process
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ env.GOOGLE_API_KEY }}
 
-      - name: 📦 Final APK Artifact
+      - name: 📦 Artifact Upload
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-Autonomous-APK
+          name: NTRLI-AI-Enabled-APK
           path: bin/*.apk
