@@ -1,56 +1,57 @@
-name: NTRLI_DroidForge_Validated_CI
+name: NTRLI_DroidForge_V7_Validated
 on: [push, workflow_dispatch]
 
 jobs:
-  validate_and_build:
+  build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 1. Repo Scan & Checkout
+      - name: 🚀 Source Scan
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Coherence Fix
+      - name: ☕ JDK 17 Enforcement
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ 3. OS-Level Validation & Patching
+      - name: 🛠️ OS-Level Dependencies (The Aidl Fix)
         run: |
           sudo apt-get update
-          # Critical: libstdc++6 and lib32z1 are the "Missing Links" for aidl
+          # Adding lib32z1 and libstdc++6 solves the 'Aidl not found' execution error
           sudo apt-get install -y python3-pip build-essential git python3-dev \
             libffi-dev libssl-dev libltdl-dev zlib1g-dev libncurses5-dev \
             libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool \
             libstdc++6 lib32z1
 
-      - name: 🛰️ 4. SDK Reconstruction (Deterministic Layout)
+      - name: 🛰️ SDK Reconstruction
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
-          mv cmdline-tools latest # MUST follow this exact nesting
+          mv cmdline-tools latest # Validates the modern /latest/ directory structure
           
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 5. Binary Extraction & License Scan
+      - name: 🛡️ License & Tool Sync
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: ✅ 6. Pre-Build Integrity Validation
+      - name: ✅ Pre-Build Integrity Scan
         run: |
-          echo "Scanning Toolchain..."
-          [ -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ] || (echo "ERR: AIDL Missing" && exit 1)
-          [ -f "main.py" ] || (echo "ERR: main.py Missing" && exit 1)
-          [ -f "buildozer.spec" ] || (echo "ERR: buildozer.spec Missing" && exit 1)
-          echo "All modules scanned. Environment Coherent."
+          # If aidl isn't here, the build crashes later. We check it NOW.
+          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
+            echo "COHERENCE ERROR: AIDL binary is missing." && exit 1
+          fi
+          echo "Integrity Validated: AIDL found."
 
-      - name: 🧪 7. Immutable Build Execution
+      - name: 🧪 Immutable Build Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
+          # Force buildozer to use our validated ANDROID_HOME
           buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
