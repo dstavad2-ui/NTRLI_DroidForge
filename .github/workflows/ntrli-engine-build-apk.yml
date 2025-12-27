@@ -1,83 +1,113 @@
-name: NTRLI Engine – Build APK & Release
+name: NTRLI Engine – AutoFix + APK Build
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   build-apk:
-    name: Build Android APK
     runs-on: ubuntu-22.04
 
+    env:
+      ANDROID_HOME: /home/runner/android-sdk
+      ANDROID_SDK_ROOT: /home/runner/android-sdk
+      PATH: /home/runner/android-sdk/cmdline-tools/latest/bin:/home/runner/android-sdk/platform-tools:/home/runner/android-sdk/build-tools/36.1.0:$PATH
+
     steps:
-      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3. System deps for Android / Buildozer
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            zip unzip git \
-            openjdk-17-jdk \
-            build-essential \
-            libffi-dev libssl-dev \
-            libjpeg-dev zlib1g-dev \
-            python3-pip \
-            autoconf automake libtool \
-            pkg-config
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
 
-      # 4. Python deps
-      - name: Install Python dependencies
+      - name: Install Python deps (engine + build)
         run: |
-          python -m pip install --upgrade pip
-          pip install buildozer cython
           if [ -f .github/scripts/requirements.txt ]; then
             pip install -r .github/scripts/requirements.txt
           fi
+          pip install buildozer cython
 
-      # 5. Accept Android licenses (non-interactive)
-      - name: Accept Android SDK licenses
+      # -----------------------------
+      # AUTOFIX: PYTHON PACKAGE
+      # -----------------------------
+      - name: Autofix Python package structure
         run: |
-          mkdir -p $HOME/.android
-          yes | sdkmanager --licenses || true
+          REQUIRED_DIRS=(
+            engine
+            engine/commands
+            engine/router
+            engine/self_improvement
+            engine/state
+            engine/trace
+            engine/utils
+          )
 
-      # 6. Run NTRLI Engine (validated earlier)
+          for d in "${REQUIRED_DIRS[@]}"; do
+            mkdir -p "$d"
+            touch "$d/__init__.py"
+          done
+
+      # -----------------------------
+      # ANDROID SDK BOOTSTRAP
+      # -----------------------------
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $ANDROID_HOME
+          cd $ANDROID_HOME
+          curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline-tools.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ || true
+
+      - name: Accept Android SDK licenses (NON-INTERACTIVE)
+        run: |
+          yes | sdkmanager --licenses
+
+      - name: Install Android platform + build-tools
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;36.1.0"
+
+      # -----------------------------
+      # VERIFY AIDL EXISTS
+      # -----------------------------
+      - name: Verify AIDL
+        run: |
+          which aidl
+          aidl --version
+
+      # -----------------------------
+      # RUN ENGINE (SAFE)
+      # -----------------------------
       - name: Run NTRLI Engine
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python -m engine.bootstrap
 
-      # 7. Build APK
+      # -----------------------------
+      # BUILD APK WITH BUILDOZER
+      # -----------------------------
       - name: Build APK with Buildozer
         run: |
           buildozer android debug
 
-      # 8. Locate APK
-      - name: Locate APK
-        id: apk
-        run: |
-          APK_PATH=$(ls bin/*.apk | head -n 1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-
-      # 9. Create GitHub Release
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      # -----------------------------
+      # PUBLISH APK
+      # -----------------------------
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ntrli-apk-${{ github.run_number }}
-          name: NTRLI DroidForge APK ${{ github.run_number }}
-          files: ${{ steps.apk.outputs.apk_path }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: ntrli-apk
+          path: bin/*.apk
