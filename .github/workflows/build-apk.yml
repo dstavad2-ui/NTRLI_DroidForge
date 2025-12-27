@@ -1,46 +1,55 @@
-name: "Part 2: NTRLI APK Build"
+name: "Part 2: NTRLI APK Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Scanner"]
+    workflows: ["Part 1: NTRLI Coherence Scanner"]
     types: [completed]
     branches: [main]
 
 jobs:
-  generate_apk:
+  forge_apk:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 Checkout
+      - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: 🛠️ Toolchain Patch (Aidl Fix)
+      - name: 🛠️ Toolchain Patch (The Aidl Execution Fix)
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y python3-pip build-essential libstdc++6 lib32z1 lib32stdc++6 cmake zip unzip
-          pip3 install --user --upgrade buildozer cython==0.29.33
+          # Essential 32-bit libraries for aidl execution on 64-bit runners
+          sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
+            python3-pip build-essential cmake zip unzip libncurses5:i386
 
-      - name: 🛰️ SDK Reconstruction
+      - name: 🛰️ Deterministic SDK Reconstruction
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
-          mv cmdline-tools latest
+          mv cmdline-tools latest # Mandatory nesting for sdkmanager
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Extraction
+      - name: 🛡️ License & Platform Extraction
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: 🧪 Buildozer Release
-        run: buildozer -v android release
+      - name: ✅ Final Integrity Verification
+        run: |
+          # If aidl fails here, it prevents wasting minutes on buildozer
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version || (echo "ERR: Aidl cannot execute." && exit 1)
+
+      - name: 🧪 Buildozer Immutable Run
+        run: |
+          pip3 install --user --upgrade buildozer cython==0.29.33
+          buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: ✍️ Sign & Artifact
+      - name: ✍️ Sign & Artifact Storage
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         with:
@@ -53,5 +62,5 @@ jobs:
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-Final-Build
+          name: NTRLI-DroidForge-Signed
           path: ${{ steps.sign_app.outputs.signedReleaseFile }}
