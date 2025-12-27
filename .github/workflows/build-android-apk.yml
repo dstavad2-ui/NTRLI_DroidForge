@@ -1,10 +1,9 @@
-name: Full Android Build (NTRLI)
+name: Build Android APK (NTRLI Full Workflow)
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -17,33 +16,26 @@ jobs:
       PYTHONUNBUFFERED: 1
 
     steps:
-      # 1) Checkout source
       - uses: actions/checkout@v4
 
-      # 2) Python setup
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3) Java 17 setup (essential)
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # 4) Install OS packages
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            zip unzip curl wget \
-            libncurses5 libstdc++6 \
-            zlib1g-dev libffi-dev libssl-dev \
-            cmake pkg-config
+          sudo apt-get install -y zip unzip curl wget \
+            libncurses5 libstdc++6 zlib1g-dev \
+            libffi-dev libssl-dev cmake pkg-config
 
-      # 5) Android cmdline-tools install
-      - name: Install Android SDK command-line tools
+      - name: Install Android cmdline-tools
         run: |
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd /tmp
@@ -53,7 +45,6 @@ jobs:
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           mv cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-      # 6) Configure PATH for Android tools
       - name: Configure Android PATH
         run: |
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
@@ -61,12 +52,10 @@ jobs:
           java -version
           sdkmanager --version
 
-      # 7) Accept Android SDK licenses
-      - name: Accept SDK licenses
+      - name: Accept Android SDK licenses
         run: |
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
 
-      # 8) Install required Android packages
       - name: Install Android SDK packages
         run: |
           sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
@@ -74,32 +63,27 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      # 9) Verify aidl presence
-      - name: Verify build-tools AIDL
+      - name: Verify aidl
         run: |
-          test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl"
+          ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
           "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
 
-      # 10) Install Buildozer + Python deps
-      - name: Install Python build tools
+      - name: Install Buildozer and deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython virtualenv
 
-      # 11) Build APK
-      - name: Build the APK
+      - name: Build APK
         run: |
           buildozer android debug
 
-      # 12) Output verification
       - name: Verify APK output
         run: |
           ls -lah bin
           test -f bin/*.apk
 
-      # 13) Upload build artifact
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
+          name: ntrli-apk
           path: bin/*.apk
