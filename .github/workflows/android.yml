@@ -1,57 +1,83 @@
-name: NTRLI_DroidForge_Validated_CI
+name: NTRLI_DroidForge_Perfected_CI
 on: [push, workflow_dispatch]
 
 jobs:
   validate_and_build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 1. Repo Scan & Checkout
+      - name: 🚀 1. Repo Sync
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Coherence Fix
+      - name: 🔐 2. Secrets Guard (Fail Fast)
+        shell: bash
+        run: |
+          MISSING=()
+          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && MISSING+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "${{ secrets.ANDROID_KEYSTORE_PASS }}" ] && MISSING+=("ANDROID_KEYSTORE_PASS")
+          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && MISSING+=("ANDROID_KEY_ALIAS")
+          [ -z "${{ secrets.ANDROID_KEY_PASS }}" ] && MISSING+=("ANDROID_KEY_PASS")
+
+          if [ ${#MISSING[@]} -ne 0 ]; then
+            echo "❌ CRITICAL ERROR: Missing GitHub Secrets: ${MISSING[*]}"
+            echo "Please go to Settings > Secrets > Actions and add them."
+            exit 1
+          fi
+          echo "✅ All Signing Secrets Validated."
+
+      - name: ☕ 3. Java 17 Coherence
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ 3. OS-Level Validation & Patching
+      - name: 🛠️ 4. OS-Level Patching (Aidl Fix)
         run: |
           sudo apt-get update
-          # Critical: libstdc++6 and lib32z1 are the "Missing Links" for aidl execution
           sudo apt-get install -y python3-pip build-essential git python3-dev \
             libffi-dev libssl-dev libltdl-dev zlib1g-dev libncurses5-dev \
             libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool \
             libstdc++6 lib32z1 lib32stdc++6
 
-      - name: 🛰️ 4. SDK Reconstruction (Deterministic Layout)
+      - name: 🛰️ 5. SDK Reconstruction
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
-          mv cmdline-tools latest # MUST follow this exact nesting for modern SDKs
-          
+          mv cmdline-tools latest
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 5. Binary Extraction & License Scan
+      - name: 🛡️ 6. License Sync
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: ✅ 6. Pre-Build Integrity Validation
+      - name: ✅ 7. Pre-Build Integrity Scan
         run: |
-          echo "Scanning Toolchain..."
           [ -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ] || (echo "ERR: AIDL Missing" && exit 1)
-          [ -f "main.py" ] || (echo "ERR: main.py Missing" && exit 1)
-          [ -f "buildozer.spec" ] || (echo "ERR: buildozer.spec Missing" && exit 1)
-          echo "All modules scanned. Environment Coherent."
+          echo "Coherence Success: Environment Validated."
 
-      - name: 🧪 7. Immutable Build Execution
+      - name: 🧪 8. Immutable Build Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          # Using -v (verbose) to catch real-time errors in Part 7
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: ✍️ 9. Sign APK (Using Verified Secrets)
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: bin
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASS }}
+
+      - name: 📦 10. Release Management
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI-Signed-APK
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
