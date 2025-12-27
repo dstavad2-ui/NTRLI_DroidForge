@@ -1,4 +1,4 @@
-name: Final APK Build (Buildozer)
+name: NTRLI Finalizer – Build Android APK
 
 on:
   workflow_dispatch:
@@ -9,96 +9,83 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
 
     env:
-      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk-r25b
+      JAVA_HOME: /usr/lib/jvm/temurin-11-jdk-amd64
+      PATH: >
+        /usr/lib/jvm/temurin-11-jdk-amd64/bin:
+        $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:
+        $HOME/.buildozer/android/platform/android-sdk/platform-tools:
+        $PATH
 
     steps:
-      # ------------------------------------------------------------
-      # 1. Checkout repository
-      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # 2. Set up Python
-      # ------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ------------------------------------------------------------
-      # 3. Install system dependencies
-      # ------------------------------------------------------------
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            zip unzip \
-            openjdk-17-jdk \
-            python3-pip \
-            autoconf libtool pkg-config \
-            zlib1g-dev \
-            libncurses5-dev libncursesw5-dev libtinfo5 \
-            libffi-dev libssl-dev \
+            git zip unzip wget curl \
+            openjdk-11-jdk \
             build-essential \
-            cmake \
-            ccache
+            libssl-dev libffi-dev \
+            libbz2-dev libsqlite3-dev \
+            zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libreadline-dev \
+            liblzma-dev
 
-      # ------------------------------------------------------------
-      # 4. Install Python dependencies
-      # ------------------------------------------------------------
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      # ------------------------------------------------------------
-      # 5. Initialize Buildozer (installs Android SDK + NDK)
-      # ------------------------------------------------------------
-      - name: Initialize Buildozer
+      # IMPORTANT: Let Buildozer download SDK/NDK first
+      - name: Pre-create Android directories
         run: |
-          buildozer android help
+          mkdir -p $HOME/.buildozer/android/platform
 
-      # ------------------------------------------------------------
-      # 6. Accept Android SDK licenses (CRITICAL)
-      # ------------------------------------------------------------
-      - name: Accept Android SDK licenses
+      - name: Initialize Buildozer (forces SDK/NDK install)
+        run: |
+          buildozer android debug || true
+
+      # FIX: Proper license acceptance using Buildozer SDK
+      - name: Accept Android SDK licenses (non-interactive)
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # ------------------------------------------------------------
-      # 7. Install required Android components
-      # ------------------------------------------------------------
-      - name: Install Android build tools
+      # FIX: Explicitly install required platform + build tools
+      - name: Install required Android components
         run: |
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      # ------------------------------------------------------------
-      # 8. Verify aidl exists (hard gate)
-      # ------------------------------------------------------------
-      - name: Verify aidl
+      - name: Verify AIDL exists
         run: |
-          find $ANDROID_HOME/build-tools -name aidl -type f
-          $ANDROID_HOME/build-tools/33.0.2/aidl --version
+          ls -lah $ANDROID_HOME/build-tools/*/aidl
+          $ANDROID_HOME/build-tools/*/aidl --version
 
-      # ------------------------------------------------------------
-      # 9. Build APK
-      # ------------------------------------------------------------
+      - name: Run NTRLI Engine bootstrap
+        run: |
+          python -m engine.bootstrap
+
       - name: Build APK with Buildozer
         run: |
-          buildozer android debug
+          buildozer -v android debug
 
-      # ------------------------------------------------------------
-      # 10. Upload APK artifact
-      # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: ntrli-debug-apk
           path: bin/*.apk
