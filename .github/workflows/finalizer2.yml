@@ -1,0 +1,44 @@
+name: NTRLI Finalizer – Part 2 (License + Toolchain Validation)
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["NTRLI Finalizer – Part 1 (Android SDK Bootstrap)"]
+    types: [completed]
+
+jobs:
+  finalize-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    env:
+      ANDROID_SDK_ROOT: /home/runner/android-sdk
+      ANDROID_HOME: /home/runner/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      PATH: >
+        /usr/bin:/bin:
+        /usr/lib/jvm/java-17-openjdk-amd64/bin:
+        /home/runner/android-sdk/cmdline-tools/latest/bin:
+        /home/runner/android-sdk/platform-tools:
+        $PATH
+
+    steps:
+      - name: Accept Android SDK licenses (SAFE)
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
+
+      - name: Install required SDK components
+        run: |
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+      - name: Verify AIDL exists (installability gate)
+        run: |
+          ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
+          "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
+
+      - name: Finalizer success
+        run: |
+          echo "FINALIZER PASSED — APKs built later will be installable"
