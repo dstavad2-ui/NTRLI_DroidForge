@@ -1,10 +1,9 @@
-name: NTRLI Finalizer – Build Android APK
+name: NTRLI Finalizer – Android APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-apk:
@@ -12,78 +11,121 @@ jobs:
     timeout-minutes: 120
 
     env:
-      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk-r25b
-      JAVA_HOME: /usr/lib/jvm/temurin-11-jdk-amd64
+      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       PATH: >
-        /usr/lib/jvm/temurin-11-jdk-amd64/bin:
-        $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:
-        $HOME/.buildozer/android/platform/android-sdk/platform-tools:
+        /usr/lib/jvm/java-17-openjdk-amd64/bin:
+        /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:
+        /home/runner/.buildozer/android/platform/android-sdk/platform-tools:
         $PATH
 
     steps:
+      # ------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # 2. Python (required by Buildozer)
+      # ------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ------------------------------------------------------------
+      # 3. System dependencies (exact set required by p4a)
+      # ------------------------------------------------------------
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip wget curl \
-            openjdk-11-jdk \
+            zip unzip wget curl git \
+            openjdk-17-jdk \
             build-essential \
-            libssl-dev libffi-dev \
-            libbz2-dev libsqlite3-dev \
-            zlib1g-dev libncurses5-dev \
-            libncursesw5-dev libreadline-dev \
-            liblzma-dev
+            autoconf libtool pkg-config \
+            zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 \
+            libffi-dev libssl-dev \
+            cmake ccache
 
+      # ------------------------------------------------------------
+      # 4. Python dependencies
+      # ------------------------------------------------------------
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      # IMPORTANT: Let Buildozer download SDK/NDK first
-      - name: Pre-create Android directories
+      # ------------------------------------------------------------
+      # 5. PREPARE buildozer directories (avoids race conditions)
+      # ------------------------------------------------------------
+      - name: Prepare Buildozer directories
         run: |
-          mkdir -p $HOME/.buildozer/android/platform
+          mkdir -p /home/runner/.buildozer/android/platform
 
-      - name: Initialize Buildozer (forces SDK/NDK install)
+      # ------------------------------------------------------------
+      # 6. INITIALIZE Buildozer
+      #    This installs:
+      #    - Android SDK
+      #    - cmdline-tools
+      #    - NDK r25b
+      #    It WILL FAIL due to licenses – this is intentional.
+      # ------------------------------------------------------------
+      - name: Initialize Buildozer (SDK/NDK bootstrap)
         run: |
           buildozer android debug || true
 
-      # FIX: Proper license acceptance using Buildozer SDK
-      - name: Accept Android SDK licenses (non-interactive)
+      # ------------------------------------------------------------
+      # 7. ACCEPT ANDROID SDK LICENSES
+      #    CRITICAL: must use the sdkmanager Buildozer installed
+      # ------------------------------------------------------------
+      - name: Accept Android SDK licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
+            --licenses
 
-      # FIX: Explicitly install required platform + build tools
-      - name: Install required Android components
+      # ------------------------------------------------------------
+      # 8. INSTALL REQUIRED SDK COMPONENTS
+      #    build-tools are REQUIRED for aidl
+      # ------------------------------------------------------------
+      - name: Install Android SDK components
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+          /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      - name: Verify AIDL exists
+      # ------------------------------------------------------------
+      # 9. VERIFY aidl EXISTS (hard gate)
+      # ------------------------------------------------------------
+      - name: Verify AIDL availability
         run: |
-          ls -lah $ANDROID_HOME/build-tools/*/aidl
-          $ANDROID_HOME/build-tools/*/aidl --version
+          find /home/runner/.buildozer/android/platform/android-sdk/build-tools -name aidl -type f
+          /home/runner/.buildozer/android/platform/android-sdk/build-tools/33.0.2/aidl --version
 
+      # ------------------------------------------------------------
+      # 10. OPTIONAL: NTRLI engine bootstrap (from your logs)
+      # ------------------------------------------------------------
       - name: Run NTRLI Engine bootstrap
         run: |
           python -m engine.bootstrap
 
+      # ------------------------------------------------------------
+      # 11. FINAL BUILD – this one MUST succeed
+      # ------------------------------------------------------------
       - name: Build APK with Buildozer
         run: |
           buildozer -v android debug
 
+      # ------------------------------------------------------------
+      # 12. UPLOAD APK
+      # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
