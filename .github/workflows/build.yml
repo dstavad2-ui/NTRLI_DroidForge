@@ -1,7 +1,7 @@
-name: "Part 2: NTRLI APK Forge"
+name: "Part 2: NTRLI Corrective Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Adaptive Scanner"]
+    workflows: ["Part 1: NTRLI Diagnostic Scanner"]
     types: [completed]
 
 jobs:
@@ -10,17 +10,15 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # Dummy values for validation
       KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
-      KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
 
     steps:
-      - name: 🚀 Sync Branch
+      - name: 🚀 Branch Sync
         uses: actions/checkout@v4
 
-      - name: 🛠️ Corrective Toolchain Patch
+      - name: 🛠️ Corrective Patch (Multi-Arch Fix)
         run: |
-          echo "Fixing 32-bit execution drift..."
+          echo "Injecting 32-bit architecture to resolve Aidl execution failure..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
@@ -31,41 +29,30 @@ jobs:
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip *.zip
-          mv cmdline-tools latest
+          unzip -q *.zip
+          mv cmdline-tools latest # Necessary for sdkmanager resolution
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Platform Extraction
+      - name: 🛡️ License & Platform Sync
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: ✅ Aidl Execution Validation
+      - name: ✅ Aidl Coherence Test
         run: |
-          echo "Verifying binary execution capability..."
+          # Verifying the fix from Job 59015607646
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 Buildozer Execution
+      - name: 🧪 Buildozer Immutable Run
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: ✍️ Dummy Signing Phase
-        continue-on-error: true
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: bin
-          signingKeyBase64: ${{ env.KEY_B64 }}
-          alias: "123"
-          keyStorePassword: ${{ env.KEY_PASS }}
-          keyPassword: ${{ env.KEY_PASS }}
-
-      - name: 📦 Upload APK Artifact
+      - name: 📦 Archive Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-DroidForge-Verified
+          name: NTRLI-DroidForge-APK
           path: bin/*.apk
