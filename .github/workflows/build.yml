@@ -1,7 +1,7 @@
 name: "Part 2: NTRLI Self-Healing Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Auditor"]
+    workflows: ["Part 1: NTRLI AI Auditor"]
     types: [completed]
 
 jobs:
@@ -10,53 +10,48 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # AI API Secret Injection
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '123' }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '123' }}
-      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || '123' }}
-      # Signing Defaults
+      # Unified Secret Overrides (Dummy 123 for bypass as requested)
       KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
+      KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
 
     steps:
-      - name: 🚀 Source Sync
+      - name: 🚀 Branch Sync
         uses: actions/checkout@v4
 
-      - name: 🩹 Automated Patching (Aidl/32-bit Fix)
+      - name: 🛠️ Corrective Patch (Multi-Arch Fix)
         run: |
+          echo "Injecting 32-bit architecture to resolve Aidl execution failure..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
-            python3-pip build-essential cmake zip unzip
+            python3-pip build-essential cmake zip unzip libncurses5:i386
 
-      - name: 🛰️ SDK Reconstruction
+      - name: 🛰️ SDK Reconstruction (Latest Standard)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q *.zip
-          mv cmdline-tools latest
+          mv cmdline-tools latest 
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: ✅ Verify Toolchain
+      - name: ✅ Aidl Coherence Test
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
+          # Direct execution test to verify the fix
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 Buildozer Execution
+      - name: 🧪 Buildozer Immutable Run
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          # Passing AI keys into the build process
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
-          GOOGLE_API_KEY: ${{ env.GOOGLE_API_KEY }}
 
-      - name: 📦 Artifact Upload
+      - name: 📦 Archive Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-AI-Enabled-APK
+          name: NTRLI-DroidForge-Autonomous-APK
           path: bin/*.apk
