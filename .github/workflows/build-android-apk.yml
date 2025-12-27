@@ -6,37 +6,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
       - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            zip unzip openjdk-17-jdk \
-            libncurses5 libstdc++6 \
-            zlib1g-dev
+            build-essential \
+            zip unzip \
+            openjdk-17-jdk \
+            git \
+            python3-pip \
+            libgl1-mesa-dev \
+            libglib2.0-0
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install buildozer cython
 
+      # IMPORTANT: Trigger SDK creation so paths exist
+      - name: Initialize Buildozer (creates Android SDK layout)
+        run: |
+          buildozer android debug || true
+
+      # CRITICAL FIX — accept licenses using SAME sdkmanager Buildozer uses
+      - name: Accept Android SDK licenses (Buildozer tools/bin)
+        run: |
+          yes | /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager \
+            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
+            --licenses
+
+      # Explicitly install build-tools so aidl exists
+      - name: Install Android build-tools 36.1.0
+        run: |
+          yes | /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager \
+            --sdk_root=/home/runner/.buildozer/android/platform/android-sdk \
+            "build-tools;36.1.0"
+
+      # Final build — no license prompts will appear
       - name: Build APK
         run: |
           buildozer android debug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ntrli-debug-apk
+          name: apk
           path: bin/*.apk
