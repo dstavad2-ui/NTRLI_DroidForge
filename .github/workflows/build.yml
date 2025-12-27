@@ -1,7 +1,7 @@
 name: "Part 2: NTRLI APK Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Coherence Scanner"]
+    workflows: ["Part 1: NTRLI Adaptive Scanner"]
     types: [completed]
 
 jobs:
@@ -10,22 +10,23 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # Defaulting to 123 as requested
+      # Dummy values for validation
       KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
       KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
 
     steps:
-      - name: 🚀 Source Sync
+      - name: 🚀 Sync Branch
         uses: actions/checkout@v4
 
-      - name: 🛠️ Toolchain Patch (Aidl Execution Fix)
+      - name: 🛠️ Corrective Toolchain Patch
         run: |
+          echo "Fixing 32-bit execution drift..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
 
-      - name: 🛰️ SDK Reconstruction (The Latest Fix)
+      - name: 🛰️ SDK Reconstruction (Latest Standard)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
@@ -40,19 +41,19 @@ jobs:
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
 
-      - name: ✅ Final Integrity Verification
+      - name: ✅ Aidl Execution Validation
         run: |
-          # This ensures the binary is actually runnable by the system
+          echo "Verifying binary execution capability..."
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 Buildozer Immutable Run
+      - name: 🧪 Buildozer Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: ✍️ Sign APK (Will use dummy 123 if real secrets missing)
+      - name: ✍️ Dummy Signing Phase
         continue-on-error: true
         uses: r0adkll/sign-android-release@v1
         id: sign_app
@@ -63,8 +64,8 @@ jobs:
           keyStorePassword: ${{ env.KEY_PASS }}
           keyPassword: ${{ env.KEY_PASS }}
 
-      - name: 📦 Upload Artifact
+      - name: 📦 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-DroidForge-APK
+          name: NTRLI-DroidForge-Verified
           path: bin/*.apk
