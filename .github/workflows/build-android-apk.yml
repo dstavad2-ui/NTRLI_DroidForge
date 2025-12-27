@@ -1,17 +1,15 @@
-name: Build Android APK (NTRLI)
+name: NTRLI Full Android Build (Finalized)
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - "NTRLI Finalizer – Part 2 (License + Toolchain Validation)"
-    types:
-      - completed
+  push:
+    branches:
+      - main
 
 jobs:
-  build-apk:
+  android:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     env:
       ANDROID_SDK_ROOT: /home/runner/android-sdk
@@ -20,17 +18,23 @@ jobs:
       PYTHONUNBUFFERED: 1
 
     steps:
-      # 1. Checkout repository
+      # ─────────────────────────────────────────────
+      # 1. Checkout
+      # ─────────────────────────────────────────────
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      # 2. Python for Buildozer
+      # ─────────────────────────────────────────────
+      # 2. Python
+      # ─────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ─────────────────────────────────────────────
       # 3. System dependencies
+      # ─────────────────────────────────────────────
       - name: Install system dependencies
         run: |
           sudo apt update
@@ -46,50 +50,78 @@ jobs:
             cmake \
             pkg-config
 
-      # 4. Restore PATH (runtime-safe)
-      - name: Restore Android PATH
+      # ─────────────────────────────────────────────
+      # 4. Android SDK (cmdline-tools)
+      # ─────────────────────────────────────────────
+      - name: Install Android SDK cmdline-tools
         run: |
-          export PATH="/usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-          echo "PATH=$PATH" >> $GITHUB_ENV
-          java -version
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd /tmp
+          curl -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip cmdline.zip
+          mv cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-      # 5. Accept Android SDK licenses (REQUIRED)
+      # ─────────────────────────────────────────────
+      # 5. PATH normalization
+      # ─────────────────────────────────────────────
+      - name: Configure PATH
+        run: |
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+          java -version
+          sdkmanager --version
+
+      # ─────────────────────────────────────────────
+      # 6. Accept licenses (HARD REQUIREMENT)
+      # ─────────────────────────────────────────────
       - name: Accept Android SDK licenses
         run: |
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
 
-      # 6. Install required SDK components explicitly
-      - name: Install Android SDK build tools
+      # ─────────────────────────────────────────────
+      # 7. Install required SDK components
+      # ─────────────────────────────────────────────
+      - name: Install Android SDK components
         run: |
           sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      # 7. Verify aidl exists (hard gate)
+      # ─────────────────────────────────────────────
+      # 8. Verify aidl (fail-fast)
+      # ─────────────────────────────────────────────
       - name: Verify build tools
         run: |
-          ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
+          test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl"
           "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
 
-      # 8. Python build tooling
+      # ─────────────────────────────────────────────
+      # 9. Python build tooling
+      # ─────────────────────────────────────────────
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython virtualenv
 
-      # 9. Build APK (cold-run safe)
+      # ─────────────────────────────────────────────
+      # 10. Build APK (NO CLEAN)
+      # ─────────────────────────────────────────────
       - name: Build APK
         run: |
           buildozer android debug
 
-      # 10. Verify output
+      # ─────────────────────────────────────────────
+      # 11. Verify output
+      # ─────────────────────────────────────────────
       - name: Verify APK
         run: |
           ls -lah bin
           test -f bin/*.apk
 
-      # 11. Upload artifact
+      # ─────────────────────────────────────────────
+      # 12. Upload artifact
+      # ─────────────────────────────────────────────
       - uses: actions/upload-artifact@v4
         with:
           name: ntrli-apk
