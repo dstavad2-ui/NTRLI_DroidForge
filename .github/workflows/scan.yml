@@ -1,0 +1,34 @@
+name: "Part 1: NTRLI Scanner"
+on: [push, workflow_dispatch]
+
+jobs:
+  coherence_check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 🚀 Source Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔐 Secrets Guard
+        run: |
+          echo "🔍 Validating Build Secrets..."
+          MISSING=()
+          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && MISSING+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "${{ secrets.ANDROID_KEYSTORE_PASS }}" ] && MISSING+=("ANDROID_KEYSTORE_PASS")
+          if [ ${#MISSING[@]} -ne 0 ]; then
+            echo "::error::❌ Missing Secrets: ${MISSING[*]}"
+            exit 1
+          fi
+
+      - name: 📁 Structure Scan
+        run: |
+          echo "🔍 Validating Engine Modules..."
+          REQUIRED=("engine/ai" "engine/router" "engine/state" "engine/utils")
+          for dir in "${REQUIRED[@]}"; do
+            [ -d "$dir" ] || (echo "::error::❌ Missing $dir" && exit 1)
+          done
+
+      - name: 🐍 Syntax Scan
+        run: |
+          echo "🔍 Compiling Python Modules..."
+          python3 -m compileall -q .
+          echo "✅ Branch Coherent."
