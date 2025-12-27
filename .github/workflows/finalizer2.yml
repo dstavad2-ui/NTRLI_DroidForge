@@ -15,15 +15,20 @@ jobs:
       ANDROID_SDK_ROOT: /home/runner/android-sdk
       ANDROID_HOME: /home/runner/android-sdk
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      PATH: >
-        /usr/bin:/bin:
-        /usr/lib/jvm/java-17-openjdk-amd64/bin:
-        /home/runner/android-sdk/cmdline-tools/latest/bin:
-        /home/runner/android-sdk/platform-tools:
-        $PATH
 
     steps:
-      - name: Accept Android SDK licenses (SAFE)
+      - name: Restore PATH correctly
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          export PATH="/usr/bin:/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          echo "PATH=$PATH" >> $GITHUB_ENV
+
+      - name: Verify sdkmanager is callable
+        run: |
+          which sdkmanager
+          sdkmanager --version
+
+      - name: Accept Android SDK licenses
         run: |
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
 
@@ -34,11 +39,11 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      - name: Verify AIDL exists (installability gate)
+      - name: Verify AIDL (installability gate)
         run: |
           ls -lah "$ANDROID_SDK_ROOT/build-tools/33.0.2"
           "$ANDROID_SDK_ROOT/build-tools/33.0.2/aidl" --version
 
       - name: Finalizer success
         run: |
-          echo "FINALIZER PASSED — APKs built later will be installable"
+          echo "FINALIZER PASSED — Android toolchain is valid"
