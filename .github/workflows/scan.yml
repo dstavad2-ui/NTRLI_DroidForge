@@ -2,27 +2,24 @@ name: "Part 1: NTRLI Auditor"
 on: [push, workflow_dispatch]
 
 jobs:
-  audit_and_fix:
+  audit:
     runs-on: ubuntu-22.04
-    outputs:
-      repair_needed: ${{ steps.check_logs.outputs.fix }}
     steps:
       - name: 🚀 Source Checkout
         uses: actions/checkout@v4
 
-      - name: 🔍 Structural Diagnostics
-        id: check_logs
+      - name: 📁 Path Integrity Scan
         run: |
-          echo "Scanning engine/ modules..."
-          DIRS=("engine/ai" "engine/router" "engine/state" "engine/utils")
-          for d in "${DIRS[@]}"; do [ -d "$d" ] || exit 1; done
-          
-          # Heuristic: Always signal fix for Ubuntu 22.04 + Aidl drift
-          echo "fix=true" >> $GITHUB_OUTPUT
+          REQUIRED=("engine/ai" "engine/router" "engine/state" "engine/utils")
+          for d in "${REQUIRED[@]}"; do [ -d "$d" ] || exit 1; done
 
-      - name: 🐍 Logic Compile
+      - name: 🧠 AI API Secret Mapping
+        run: |
+          echo "🔍 Mapping AI API Keys (Bypassing with 123 if null)..."
+          # Standard AI keys for NTRLI Engine
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || '123' }}" >> $GITHUB_ENV
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY || '123' }}" >> $GITHUB_ENV
+          echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY || '123' }}" >> $GITHUB_ENV
+
+      - name: 🐍 Python Logic Check
         run: python3 -m compileall -q .
-
-      - name: 🛡️ Secret Defaulting
-        run: |
-          echo "Validating Secrets... (Mapped to 123 for autonomous flow)"
