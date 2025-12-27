@@ -1,0 +1,98 @@
+name: NTRLI Engine (Auto-Fix + Run)
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  ntrli-engine:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install script dependencies if present
+        run: |
+          if [ -f .github/scripts/requirements.txt ]; then
+            pip install -r .github/scripts/requirements.txt
+          fi
+
+      # ---------------------------------------------
+      # AUTO-FIX PHASE (NO USER INTERACTION)
+      # ---------------------------------------------
+
+      - name: Ensure engine is a valid Python package
+        run: |
+          set -e
+          echo "Validating package structure..."
+
+          REQUIRED_DIRS=(
+            "engine"
+            "engine/commands"
+            "engine/router"
+            "engine/self_improvement"
+            "engine/state"
+            "engine/trace"
+            "engine/utils"
+          )
+
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+              if [ ! -f "$dir/__init__.py" ]; then
+                echo "Fixing missing __init__.py in $dir"
+                touch "$dir/__init__.py"
+              fi
+            fi
+          done
+
+      - name: Auto-detect broken script execution patterns
+        run: |
+          set -e
+          echo "Scanning for invalid Python execution..."
+
+          if grep -R "python engine/bootstrap.py" -n .github/workflows; then
+            echo "Invalid script execution detected."
+            echo "This workflow enforces module execution automatically."
+          fi
+
+      - name: Commit auto-fixes if any
+        run: |
+          if git status --porcelain | grep .; then
+            echo "Auto-fixes detected. Committing..."
+            git config user.name "ntrli-autofix-bot"
+            git config user.email "autofix@ntrli.local"
+            git add .
+            git commit -m "auto-fix: normalize Python package execution"
+            git push
+          else
+            echo "No fixes required."
+          fi
+
+      # ---------------------------------------------
+      # EXECUTION PHASE (SAFE MODE)
+      # ---------------------------------------------
+
+      - name: Run NTRLI Engine (module-safe)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m engine.bootstrap
