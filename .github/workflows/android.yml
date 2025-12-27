@@ -1,67 +1,57 @@
-name: NTRLI_DroidForge_Production
-on:
-  push:
-    tags:
-      - 'v*' 
-  workflow_dispatch:
-
-permissions:
-  contents: write
+name: NTRLI_DroidForge_Validated
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 🚀 Checkout Code
+      - name: 🚀 Source Check
         uses: actions/checkout@v4
 
-      - name: ☕ Setup JDK 17
+      - name: ☕ JDK 17 Enforcement
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ Install Toolchain
+      - name: 🛠️ Clean Environment Setup
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip build-essential git python3-dev \
             libffi-dev libssl-dev libltdl-dev zlib1g-dev libncurses5-dev \
             libncursesw5-dev libtinfo5 cmake zip unzip ant autoconf libtool
 
-      - name: 🛰️ Deterministic SDK Layout
+      - name: 🛰️ Toolchain Synchronization (The "Latest" Fix)
         run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk/cmdline-tools
+          # Define absolute paths to prevent variable drift
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip *.zip
-          mv cmdline-tools latest
+          mv cmdline-tools latest # Validates the /latest/ structure
+          
+          # Force export to Global Environment
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ Accept Licenses & Build
+      - name: 🛡️ Deterministic License & Package Sync
         run: |
+          # Accept licenses manually to unlock build-tools/aidl
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
+
+      - name: ✅ Pre-flight Validation (No Obsolete Paths)
+        run: |
+          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
+            echo "COHERENCE ERROR: AIDL binary is missing. Check licenses." && exit 1
+          fi
+          echo "Validation Successful: AIDL and SDK Manager ready."
+
+      - name: 🧪 Immutable Build
+        run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
+          # Force Buildozer to respect the ANDROID_HOME we validated
           buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
-
-      - name: ✍️ Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: bin
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASS }}
-
-      - name: 📦 Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
-          name: NTRLI Forge Release ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
