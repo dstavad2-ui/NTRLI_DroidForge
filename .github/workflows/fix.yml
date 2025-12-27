@@ -1,23 +1,20 @@
-name: NTRLI_DroidForge Full Fix
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+name: NTRLI_DroidForge_Future_Build
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout Code
+      - name: 🚀 Quantum Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: ☕ Java 17 Enforcement (The Foundation)
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install System Dependencies
+      - name: 🛠️ Immutable System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -26,28 +23,39 @@ jobs:
             libncurses5-dev libncursesw5-dev libtinfo5 \
             cmake zip unzip ant autoconf libtool
 
-      - name: Enforce Android SDK Layout (The "Latest" Fix)
+      - name: 🛰️ Deterministic SDK Layout (The Latest Fix)
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip commandlinetools-linux-*.zip
-          mv cmdline-tools latest # MUST move to 'latest' for sdkmanager to function
+          unzip *.zip
+          mv cmdline-tools latest # MUST be inside 'latest/'
           
+          # Injecting Paths into Environment
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$PATH:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools" >> $GITHUB_ENV
 
-      - name: Accept Licenses & Install Build-Tools
+      - name: 🛡️ Pre-flight Integrity & License Acceptance
         run: |
-          # Accepting licenses unlocks aidl and other binaries
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
+          
+          # Verification of critical binary
+          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
+            echo "FAILED: AIDL missing. Build aborted for safety." && exit 1
+          fi
 
-      - name: Build APK with Buildozer
+      - name: 🧪 Buildozer Execution
         run: |
-          pip3 install --user --upgrade buildozer
-          # Force buildozer to use our pre-configured SDK
+          pip3 install --user --upgrade buildozer cython==0.29.33
+          # Using 'release' ensures strict compilation checks
           buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: 📦 Artifact Preservation
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTRLI_Forge_APK
+          path: bin/*.apk
