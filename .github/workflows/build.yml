@@ -13,10 +13,8 @@ jobs:
       actions: write
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # Admin AI API Sovereignty - Integrated for Engine Logic
       ADMIN_OPENAI: "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"
       ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
-      # The 123 Bypass Protocol for Automated Signing
       KEY_PASS: "123"
       KEY_ALIAS: "123"
 
@@ -25,18 +23,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-          token: ${{ github.token }}
 
-      - name: 🧬 2. Research-Validated System Mutation
-        # Fix for Error 127: Injecting 32-bit ELF interpreter & legacy ncurses
+      - name: ☕ 2. Deterministic Java Setup (Fixes SDK Manager Error)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 🧬 3. Multi-Arch System Mutation
         run: |
-          echo "Repairing Runner Architecture..."
+          echo "Injecting 32-bit Compatibility Layer for Aidl..."
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
           
-          # Idempotent Spec Mutation: Enforcing API 33 & AI Dependencies
           if [ -f "buildozer.spec" ]; then
             sed -i 's/^requirements = .*/requirements = python3,kivy,android,openai,mistralai/g' buildozer.spec
             sed -i 's/^android.api = .*/android.api = 33/g' buildozer.spec
@@ -44,8 +45,7 @@ jobs:
             sed -i 's/^android.minapi = .*/android.minapi = 21/g' buildozer.spec
           fi
 
-      - name: 🛰️ 3. Deterministic SDK Construction
-        # Standardized Pathing to prevent relative-link breakage
+      - name: 🛰️ 4. Idempotent SDK Construction
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
@@ -55,36 +55,37 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 4. Toolchain Validation (Pre-Flight)
+      - name: 🛡️ 5. Toolchain Validation (Pre-Flight)
         run: |
           chmod -R +x ${{ github.workspace }}
+          # Path corrected for direct execution
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
           
-          # Verification: The build fails here if Aidl paradox is unresolved
+          # Verification: Aidl binary test
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 5. Autonomous Build Execution
+      - name: 🧪 6. Autonomous Build Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: 📝 6. Branch Persistence (Self-Healing)
+      - name: 📝 7. Branch Persistence
         if: success()
         run: |
           git config --global user.name "NTRLI-Autonomous-Bot"
           git config --global user.email "bot@ntrli.ai"
           git add buildozer.spec
-          git diff --staged --quiet || (git commit -m "🤖 Deterministic Mutation: SDK & Spec Fix" && git push origin main)
+          git diff --staged --quiet || (git commit -m "🤖 Deterministic Fix: JDK 17 & SDK Path" && git push origin main)
 
-      - name: 📦 7. Release Artifact Deployment
+      - name: 📦 8. Release Artifact Deployment
         if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: NTRLI Production v${{ github.run_number }}
-          body: "Validated against academic SRE standards. Aidl Paradox Resolved via Multi-Arch Shim."
+          body: "Validated against SRE standards. Java 17 and Aidl Paradox resolved."
           files: bin/*.apk
           token: ${{ github.token }}
