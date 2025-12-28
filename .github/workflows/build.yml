@@ -10,18 +10,15 @@ jobs:
     permissions:
       contents: write
     env:
-      # Deterministic Path Anchoring
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      # Admin Credentials
-      ADMIN_OPENAI: "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"
-      ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
+      # Path injection to force Buildozer to use our validated tools
+      BUILDOZER_SDK_PATH: ${{ github.workspace }}/android-sdk
+      BUILDOZER_NDK_PATH: ${{ github.workspace }}/android-ndk
 
     steps:
-      - name: 🚀 1. Atomic Sync
+      - name: 🚀 1. Mobile Sync
         uses: actions/checkout@v4
-        with:
-          ref: main
 
       - name: ☕ 2. Java 17 Enforcement
         uses: actions/setup-java@v4
@@ -29,31 +26,39 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🧬 3. High-Integrity Mutation (The Fix for Log 20547525712)
+      - name: 🧬 3. God-Mode Dependency Injection (Fix for Log 59020186173)
         run: |
-          # 1. Architecture Shim (Aidl Error 127 Fix)
+          echo "Installing all missing headers and architecture shims..."
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 \
-            python3-pip build-essential cmake zip unzip libncurses5:i386
+          # Installing every single missing item identified in recent failures
+          sudo apt-get install -y -qq \
+            build-essential ccache cmake curl git libffi-dev libssl-dev \
+            libstdc++6:i386 lib32z1 lib32stdc++6 libncurses5:i386 \
+            openjdk-17-jdk python3-dev python3-pip unzip zip zlib1g-dev \
+            autoconf automake libtool pkg-config lld
           
-          # 2. Live Spec Correction (Ensures cohesion with your branch files)
-          if [ -f "buildozer.spec" ]; then
-            sed -i 's|^android.api = .*|android.api = 33|g' buildozer.spec
-            sed -i 's|^android.minapi = .*|android.minapi = 21|g' buildozer.spec
-            sed -i 's|^android.sdk = .*|android.sdk = 33|g' buildozer.spec
-            sed -i 's|^android.build_tools_version = .*|android.build_tools_version = 33.0.2|g' buildozer.spec
-            sed -i 's|^android.ndk = .*|android.ndk = 25b|g' buildozer.spec
-            sed -i 's|^android.accept_sdk_license = .*|android.accept_sdk_license = True|g' buildozer.spec
-            
-            # Save correction to branch
-            git config --global user.name "NTRLI-GodBot"
-            git config --global user.email "bot@ntrli.ai"
-            git add buildozer.spec
-            git diff --staged --quiet || (git commit -m "🤖 God-Mode: Live Spec Alignment" && git push origin main)
+          # AUTO-GENERATION: Create spec if it doesn't exist
+          if [ ! -f "buildozer.spec" ]; then
+            pip3 install --user buildozer
+            ~/.local/bin/buildozer init
           fi
 
-      - name: 🛰️ 4. Manual Toolchain Construction
+          # SELF-HEAL: Force alignment with verified 2025 paths
+          sed -i 's|^android.api = .*|android.api = 33|g' buildozer.spec
+          sed -i 's|^android.sdk = .*|android.sdk = 33|g' buildozer.spec
+          sed -i 's|^android.ndk = .*|android.ndk = 25b|g' buildozer.spec
+          sed -i 's|^android.build_tools_version = .*|android.build_tools_version = 33.0.2|g' buildozer.spec
+          sed -i 's|^android.accept_sdk_license = .*|android.accept_sdk_license = True|g' buildozer.spec
+          sed -i 's|^requirements = .*|requirements = python3,kivy,android,openai,mistralai|g' buildozer.spec
+          
+          # Live Correction Push
+          git config --global user.name "NTRLI-GodBot"
+          git config --global user.email "bot@ntrli.ai"
+          git add buildozer.spec
+          git diff --staged --quiet || (git commit -m "🤖 God-Mode: Full Dependency & Spec Restoration" && git push origin main)
+
+      - name: 🛰️ 4. SDK/NDK Manual Construction
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
@@ -64,29 +69,24 @@ jobs:
           
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 5. Integrity Audit (Pre-Flight)
+      - name: 🛡️ 5. Pre-Flight Integrity Audit
         run: |
           chmod -R +x ${{ github.workspace }}
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
-          
-          # Verify Aidl is actually executable now
+          # Verify the tool that failed in previous logs
           $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
 
-      - name: 🧪 6. Buildozer Force-Path Execution
+      - name: 🧪 6. Execution (Path-Locked Mode)
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          # KEY FIX: Force Buildozer to use the validated paths from Step 4 & 5
-          # This prevents the "Aidl not found" error in your last log.
-          buildozer -v android release
+          # Path injection overrides buildozer's internal drift
+          ~/.local/bin/buildozer -v android release
         env:
-          ANDROID_HOME_TARGET: ${{ env.ANDROID_HOME }}
-          ANDROID_NDK_HOME_TARGET: ${{ env.ANDROID_NDK_HOME }}
-          # Path injection to override buildozer internal logic
-          BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
-          BUILDOZER_NDK_PATH: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📦 7. Release to Mobile
+      - name: 📦 7. Production Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
