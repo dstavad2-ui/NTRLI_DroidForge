@@ -15,10 +15,10 @@ jobs:
       BUILDOZER_BIN: /home/runner/.local/bin/buildozer
 
     steps:
-      - name: 🚀 1. Atomic Sync & Self-Heal
+      - name: 🚀 1. Atomic Sync
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Sovereignty
+      - name: ☕ 2. Java 17 Enforcement
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -27,9 +27,10 @@ jobs:
       - name: 🛡️ 3. Pre-Flight Syntax Shield
         run: |
           pip3 install flake8
+          # Halt on critical syntax errors immediately
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: 🧬 4. God-Mode Environment Mutation (AI-Generated Logic)
+      - name: 🧬 4. God-Mode Environment Mutation
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
@@ -43,7 +44,6 @@ jobs:
 
       - name: 🛰️ 5. SDK/NDK Manual Construction
         run: |
-          # Clean start for directory nesting
           rm -rf $ANDROID_HOME
           mkdir -p $ANDROID_HOME/cmdline-tools/latest
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
@@ -54,31 +54,30 @@ jobs:
           unzip -q ndk.zip
           mv android-ndk-r25b $ANDROID_NDK_HOME
 
-      - name: 🛡️ 6. Absolute Integrity Audit (LIVE LOG CORRECTION)
+      - name: 🛡️ 6. Absolute Integrity Audit (Logic Fix for 59021050937)
         run: |
-          # FIX: Explicitly setting the SDK path in the manager environment
           SDK_BIN=$ANDROID_HOME/cmdline-tools/latest/bin
           chmod +x $SDK_BIN/sdkmanager
           
-          # Accept licenses using the direct root flag to prevent "Permission Denied"
+          # Force License Acceptance with explicit root to prevent permission drift
           yes | $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME --licenses
           
-          # Install specific build tools required by Kivy/Buildozer
+          # Install toolchain components
           $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "platform-tools" \
             "extras;android;m2repository"
           
-          # Permission Handshake: Ensure the runner owns the entire toolchain
+          # Hard ownership reset to prevent Step 7 "Permission Denied"
           sudo chown -R runner:runner $ANDROID_HOME
           
-          # Final Verification of Aidl Linkage
+          # Aidl check
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
       - name: 🧪 7. Path-Locked Execution (God-Mode)
         run: |
-          # Ensure Buildozer uses our verified SDK and not its own hidden cache
+          # Inject validated paths into session
           export PATH=$PATH:/home/runner/.local/bin:$ANDROID_HOME/platform-tools
           $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
         env:
@@ -87,12 +86,13 @@ jobs:
           BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
           BUILDOZER_NDK_PATH: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📊 8. Success Report & Fail-State Diagnostic
+      - name: 📊 8. Success Report & Diagnostic
         if: always()
         run: |
-          echo "### 📱 NTRLI God-Mode Intelligence" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 NTRLI Build Intelligence" >> $GITHUB_STEP_SUMMARY
           if ls bin/*.apk 1> /dev/null 2>&1; then
             echo "✅ **STATUS: APK FORGED**" >> $GITHUB_STEP_SUMMARY
+            echo "- Size: $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **STATUS: BUILD FAILED**" >> $GITHUB_STEP_SUMMARY
             echo '```text' >> $GITHUB_STEP_SUMMARY
@@ -100,7 +100,7 @@ jobs:
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 📦 9. Production Release (Deterministic)
+      - name: 📦 9. Production Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
