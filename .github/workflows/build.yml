@@ -1,109 +1,36 @@
-name: NTRLI Supreme God-Mode Forge
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+import sys
+import traceback
+from kivy.app import App
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.clock import Clock
 
-jobs:
-  forge_and_mutate:
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    env:
-      ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      BUILDOZER_BIN: /home/runner/.local/bin/buildozer
-      # Power Move: Force GitHub to ignore its own internal SDK paths
-      BUILDOZER_SDK_PATH: ${{ github.workspace }}/android-sdk
-      BUILDOZER_NDK_PATH: ${{ github.workspace }}/android-ndk
-      # Superiority Protocol: Override all interactive blocks
-      CI: true
+class GodModeApp(App):
+    def build(self):
+        self.root_widget = ScrollView()
+        self.logger = Label(
+            text="[SYSTEM] NTRLI Resilience Active...\n",
+            size_hint_y=None,
+            markup=True
+        )
+        self.logger.bind(texture_size=self.logger.setter('size'))
+        self.root_widget.add_widget(self.logger)
+        
+        # Self-Healing: Redirect errors to the UI
+        sys.excepthook = self.handle_exception
+        return self.root_widget
 
-    steps:
-      - name: 🚀 1. Atomic Sync & Branch Dominance
-        uses: actions/checkout@v4
+    def log(self, message):
+        def _update_log(dt):
+            self.logger.text += f"[LOG] {message}\n"
+        Clock.schedule_once(_update_log)
 
-      - name: ☕ 2. Java 17 Enforcement (JDK 61)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+    def handle_exception(self, exc_type, exc_value, exc_traceback):
+        err = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        self.log(f"[COLOR=ff0000]CRITICAL ERROR:[/COLOR]\n{err}")
 
-      - name: 🧬 3. Multi-Agent Dependency Injection
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential ccache cmake curl git \
-            libffi-dev libssl-dev libstdc++6:i386 lib32z1 lib32stdc++6 \
-            libncurses5:i386 openjdk-17-jdk python3-dev python3-pip unzip zip \
-            zlib1g-dev autoconf automake libtool pkg-config lld
-          pip3 install --user --upgrade buildozer cython==0.29.33 flake8
-          echo "/home/runner/.local/bin" >> $GITHUB_PATH
-
-      - name: 🛰️ 4. SDK/NDK Absolute Construction (The Superior Pivot)
-        run: |
-          rm -rf $ANDROID_HOME
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
-          unzip -q cmdline.zip
-          # Direct Injection: Ensure sdkmanager is in the exact path GitHub demands
-          mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-          
-          curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
-          unzip -q ndk.zip
-          mv android-ndk-r25b $ANDROID_NDK_HOME
-
-      - name: 🛡️ 5. Superior Integrity Audit (Total Ownership)
-        run: |
-          SDK_MGR=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          chmod +x $SDK_MGR
-          
-          # Universal License Sovereignty
-          yes | $SDK_MGR --sdk_root=$ANDROID_HOME --licenses
-          
-          # Force Component Deployment
-          $SDK_MGR --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "platform-tools"
-          
-          # Superiority Fix: Recursive 777 ensures no 'Permission Denied' ever triggers again
-          sudo chmod -R 777 $GITHUB_WORKSPACE
-          
-          # Link Verification
-          $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
-
-      - name: 🧪 6. Path-Locked Execution (Non-Guessing Mode)
-        run: |
-          if [ ! -f "buildozer.spec" ]; then $BUILDOZER_BIN init; fi
-          # Force internal spec to align with current God-Mode paths
-          sed -i "s|^#\?android.sdk_path = .*|android.sdk_path = $ANDROID_HOME|g" buildozer.spec
-          sed -i "s|^#\?android.ndk_path = .*|android.ndk_path = $ANDROID_NDK_HOME|g" buildozer.spec
-          sed -i "s|^#\?android.accept_sdk_license = .*|android.accept_sdk_license = True|g" buildozer.spec
-          sed -i "s|^requirements = .*|requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer,openssl,requests|g" buildozer.spec
-          
-          # Global Path Poisoning: Overwrite session paths to prioritize our tools
-          export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:/home/runner/.local/bin:$PATH
-          $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
-
-      - name: 📊 7. Final Success Summary
-        if: always()
-        run: |
-          echo "### 📱 NTRLI Supreme God-Mode Status" >> $GITHUB_STEP_SUMMARY
-          if ls bin/*.apk 1> /dev/null 2>&1; then
-            echo "✅ **DOMINANCE ACHIEVED: APK READY**" >> $GITHUB_STEP_SUMMARY
-            echo "- File: $(ls bin/*.apk)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **BUILD RESISTANCE DETECTED**" >> $GITHUB_STEP_SUMMARY
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            [ -f build_logs.txt ] && tail -n 50 build_logs.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: 📦 8. Instant Mobile Release
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: release-${{ github.run_id }}
-          files: bin/*.apk
-          token: ${{ github.token }}
+if __name__ == "__main__":
+    try:
+        GodModeApp().run()
+    except Exception as e:
+        print(f"Fatal Startup: {e}")
