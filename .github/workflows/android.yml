@@ -1,50 +1,82 @@
-name: "Part 2: NTRLI APK Forge"
+name: "Part 2: NTRLI Universal Autonomous Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Coherence Scanner"]
+    workflows: ["Part 1: NTRLI Auditor & Planner"]
     types: [completed]
 
 jobs:
-  forge_apk:
+  forge_and_release:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
-      # Hardcoded dummy values for toolchain testing
-      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
-      KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ADMIN_OPENAI: "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"
+      ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
+      KEY_PASS: "123"
+      KEY_ALIAS: "123"
 
     steps:
-      - name: 🚀 Source Sync
+      - name: 🚀 1. Checkout Branch
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
-      - name: 🛠️ Toolchain Patch (Aidl Fix)
+      - name: 🧬 2. Mutation: Global Repair (Fixes Run 20546272641)
         run: |
+          echo "Applying architectural fix for Aidl..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
-            python3-pip build-essential cmake zip unzip
+            python3-pip build-essential cmake zip unzip libncurses5:i386
+          
+          # Branch Content Mutation: Auto-fix buildozer.spec
+          if [ -f "buildozer.spec" ]; then
+            sed -i 's/requirements = python3,kivy/requirements = python3,kivy,android,openai,mistralai/g' buildozer.spec
+            # Ensure proper API level matching for 2025
+            sed -i 's/android.api = 31/android.api = 33/g' buildozer.spec
+          fi
 
-      - name: 🛰️ SDK Reconstruction
+      - name: 🛰️ 3. SDK Nesting Standard
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          # Download and setup logic (same as previous)
-          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q *.zip && mv cmdline-tools latest
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🧪 Buildozer Immutable Run
+      - name: 🛡️ 4. Permission & Aidl Test
+        run: |
+          chmod -R +x ${{ github.workspace }}
+          yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
+          sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
+          # Direct Verification
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version
+
+      - name: 🧪 5. Buildozer Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: ✍️ Attempt Signing (Fails if Secret is 123)
-        continue-on-error: true
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
+      - name: 📝 6. Self-Commit Branch Changes
+        if: success()
+        run: |
+          git config --global user.name "NTRLI-Autonomous-Bot"
+          git config --global user.email "bot@ntrli.ai"
+          git add .
+          git diff-index --quiet HEAD || git commit -m "🤖 Universal Mutation: Fixed Aidl & Spec requirements"
+          git push
+
+      - name: 📦 7. Self-Release
+        if: success()
+        uses: softprops/action-gh-release@v2
         with:
-          releaseDirectory: bin
-          signingKeyBase64: ${{ env.KEYSTORE_B64 }}
-          alias: "123"
-          keyStorePassword: ${{ env.KEY_PASS }}
-          keyPassword: ${{ env.KEY_PASS }}
+          tag_name: v${{ github.run_number }}
+          name: NTRLI Release v${{ github.run_number }}
+          body: "Autonomous branch repair and build complete. [Ref Run: ${{ github.run_id }}]"
+          files: bin/*.apk
+          token: ${{ github.token }}
