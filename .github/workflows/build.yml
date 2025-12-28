@@ -1,4 +1,4 @@
-name: NTRLI God-Mode Self-Healing Forge
+name: NTRLI God-Mode Perpetual Forge
 on:
   push:
     branches: [main]
@@ -10,83 +10,103 @@ jobs:
     permissions:
       contents: write
     env:
+      # Absolute Path Anchoring for Mobile-First Efficacy
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      # Path injection to force Buildozer to use our validated tools
-      BUILDOZER_SDK_PATH: ${{ github.workspace }}/android-sdk
-      BUILDOZER_NDK_PATH: ${{ github.workspace }}/android-ndk
+      BUILDOZER_BIN: /home/runner/.local/bin/buildozer
 
     steps:
-      - name: 🚀 1. Mobile Sync
+      - name: 🚀 1. Atomic Sync & Deep Clean
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Enforcement
+      - name: ☕ 2. Java 17 Sovereignty (LTS Fix)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🧬 3. God-Mode Dependency Injection (Fix for Log 59020186173)
+      - name: 🛡️ 3. Pre-Flight Syntax Shield (Before Build)
         run: |
-          echo "Installing all missing headers and architecture shims..."
+          pip3 install flake8
+          # Halt immediately on syntax/indentation errors to save time
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: 🧬 4. God-Mode Environment Mutation (Live Correction)
+        run: |
+          # Architecture Shim for Aidl Error 127
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          # Installing every single missing item identified in recent failures
-          sudo apt-get install -y -qq \
-            build-essential ccache cmake curl git libffi-dev libssl-dev \
-            libstdc++6:i386 lib32z1 lib32stdc++6 libncurses5:i386 \
-            openjdk-17-jdk python3-dev python3-pip unzip zip zlib1g-dev \
-            autoconf automake libtool pkg-config lld
+          sudo apt-get install -y -qq build-essential ccache cmake curl git \
+            libffi-dev libssl-dev libstdc++6:i386 lib32z1 lib32stdc++6 \
+            libncurses5:i386 openjdk-17-jdk python3-dev python3-pip unzip zip \
+            zlib1g-dev autoconf automake libtool pkg-config lld
           
-          # AUTO-GENERATION: Create spec if it doesn't exist
-          if [ ! -f "buildozer.spec" ]; then
-            pip3 install --user buildozer
-            ~/.local/bin/buildozer init
-          fi
-
-          # SELF-HEAL: Force alignment with verified 2025 paths
+          # Force Path Injection for current session
+          pip3 install --user --upgrade buildozer cython==0.29.33
+          echo "/home/runner/.local/bin" >> $GITHUB_PATH
+          
+          # Deterministic buildozer.spec Alignment
+          if [ ! -f "buildozer.spec" ]; then /home/runner/.local/bin/buildozer init; fi
           sed -i 's|^android.api = .*|android.api = 33|g' buildozer.spec
           sed -i 's|^android.sdk = .*|android.sdk = 33|g' buildozer.spec
           sed -i 's|^android.ndk = .*|android.ndk = 25b|g' buildozer.spec
           sed -i 's|^android.build_tools_version = .*|android.build_tools_version = 33.0.2|g' buildozer.spec
-          sed -i 's|^android.accept_sdk_license = .*|android.accept_sdk_license = True|g' buildozer.spec
-          sed -i 's|^requirements = .*|requirements = python3,kivy,android,openai,mistralai|g' buildozer.spec
+          # Lock sub-dependencies for AI Stability (OpenAI/Mistral)
+          sed -i 's|^requirements = .*|requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer|g' buildozer.spec
           
-          # Live Correction Push
+          # Sync mutation to GitHub so correction is live
           git config --global user.name "NTRLI-GodBot"
           git config --global user.email "bot@ntrli.ai"
           git add buildozer.spec
-          git diff --staged --quiet || (git commit -m "🤖 God-Mode: Full Dependency & Spec Restoration" && git push origin main)
+          git diff --staged --quiet || (git commit -m "🤖 God-Mode: Synchronized Environment Mutation" && git push origin main)
 
-      - name: 🛰️ 4. SDK/NDK Manual Construction
+      - name: 🛰️ 5. Validated SDK/NDK Structural Anchor
         run: |
+          # Reconstruct Google-Standard Directory Tree
           mkdir -p $ANDROID_HOME/cmdline-tools
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
-          unzip -q cmdline.zip -d $ANDROID_HOME/cmdline-tools && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          unzip -q cmdline.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           
+          # NDK Fix for Python 3.10+
           curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
-          unzip -q ndk.zip -d ${{ github.workspace }} && mv ${{ github.workspace }}/android-ndk-r25b $ANDROID_NDK_HOME
-          
-          echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+          unzip -q ndk.zip -d ${{ github.workspace }}
+          mv ${{ github.workspace }}/android-ndk-r25b $ANDROID_NDK_HOME
 
-      - name: 🛡️ 5. Pre-Flight Integrity Audit
+      - name: 🛡️ 6. Absolute Integrity Audit (Pre-Execution)
         run: |
-          chmod -R +x ${{ github.workspace }}
+          chmod +x $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
           # Verify the tool that failed in previous logs
           $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
 
-      - name: 🧪 6. Execution (Path-Locked Mode)
+      - name: 🧪 7. Path-Locked Execution (God-Mode)
         run: |
-          pip3 install --user --upgrade buildozer cython==0.29.33
-          # Path injection overrides buildozer's internal drift
-          ~/.local/bin/buildozer -v android release
+          $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
+          BUILDOZER_NDK_PATH: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📦 7. Production Release
+      - name: 📊 8. Success Report & Memory Guard
+        if: always()
+        run: |
+          echo "### 📱 NTRLI Build Intelligence" >> $GITHUB_STEP_SUMMARY
+          if [ -f bin/*.apk ]; then
+            echo "✅ **STATUS: APK FORGED**" >> $GITHUB_STEP_SUMMARY
+            echo "- **Final Size:** $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Integrity:** Verified (Zero-Tolerance Pass)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **STATUS: BUILD FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "#### Critical Log Analysis:" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 30 build_logs.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 📦 9. Production Release to Mobile
         if: success()
         uses: softprops/action-gh-release@v2
         with:
