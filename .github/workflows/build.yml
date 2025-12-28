@@ -12,10 +12,8 @@ jobs:
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      # Admin AI API Sovereignty
       ADMIN_OPENAI: "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"
       ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
-      # Verifiable "123" Bypass for headless signing
       KEY_PASS: "123"
       KEY_ALIAS: "123"
 
@@ -32,70 +30,59 @@ jobs:
           java-version: '17'
 
       - name: 🧬 3. Multi-Arch System Mutation (Aidl Linkage Fix)
-        # Academic standard: Injecting 32-bit ELF interpreter
         run: |
-          echo "Injecting 32-bit Linker Shim..."
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
           
-          # Logic Mutation: Force-Align buildozer.spec with 2025 Branch Requirements
+          # Logic Mutation: Align spec with current engine structure
           if [ -f "buildozer.spec" ]; then
+            sed -i 's/^source.include_exts = .*/source.include_exts = py,png,jpg,kv,json/g' buildozer.spec
             sed -i 's/^requirements = .*/requirements = python3,kivy,android,openai,mistralai/g' buildozer.spec
             sed -i 's/^android.api = .*/android.api = 33/g' buildozer.spec
-            sed -i 's/^android.sdk = .*/android.sdk = 33/g' buildozer.spec
             sed -i 's/^android.ndk = .*/android.ndk = 25b/g' buildozer.spec
-            sed -i 's/^android.build_tools_version = .*/android.build_tools_version = 33.0.2/g' buildozer.spec
           fi
 
       - name: 🛰️ 4. Idempotent SDK & NDK Construction
         run: |
-          # SDK Reconstruction
           mkdir -p $ANDROID_HOME/cmdline-tools
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip -d $ANDROID_HOME/cmdline-tools && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           
-          # NDK Anchoring: r25b is required for stable Python-Kivy linkage
           curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
           unzip -q ndk.zip -d ${{ github.workspace }} && mv ${{ github.workspace }}/android-ndk-r25b $ANDROID_NDK_HOME
           
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 5. Toolchain Integrity Audit (Min. Requirements)
+      - name: 🛡️ 5. Toolchain Integrity Audit
         run: |
           chmod -R +x ${{ github.workspace }}
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
           
-          # Fail-fast mechanism: Verification of Aidl execution
-          echo "Verifying Aidl binary execution..."
+          # Verification of Aidl execution
           $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
-          echo "✅ Environmental requirements satisfied."
 
       - name: 🧪 6. Buildozer Deterministic Build
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          # Lock Buildozer to the validated SDK/NDK environment
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📝 7. Self-Healing Branch Mutation
-        if: success()
+      - name: 📝 7. Module Mapping Verification
         run: |
-          git config --global user.name "NTRLI-Bot"
-          git config --global user.email "bot@ntrli.ai"
-          git add buildozer.spec
-          git diff --staged --quiet || (git commit -m "🤖 Deterministic Repair: SDK & Dependencies Sync" && git push origin main)
+          # Verify that the build output directory (bin/) contains the APK
+          if [ ! -f bin/*.apk ]; then
+            echo "Error: APK not found. Build process failed."
+            exit 1
+          fi
 
-      - name: 📦 8. Final Release & Signature Validation
-        if: success()
+      - name: 📦 8. Final Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: NTRLI Production v${{ github.run_number }}
-          body: "Validated against SRE standards. Multi-arch linkage and Java 17 parity achieved."
           files: bin/*.apk
           token: ${{ github.token }}
