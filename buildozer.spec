@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
 # --- Version Locks ---
-requirements = python3,kivy,android,openai,mistralai
+requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer
 android.api = 33
 android.minapi = 21
 android.sdk = 33
