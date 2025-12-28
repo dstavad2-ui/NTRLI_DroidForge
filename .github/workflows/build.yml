@@ -1,57 +1,56 @@
-name: "Part 2: NTRLI Self-Healing Forge"
+name: "Part 2: NTRLI Autonomous Forge"
 on:
   workflow_run:
-    workflows: ["Part 1: NTRLI Adaptive Scanner"]
+    workflows: ["Part 1: NTRLI Auditor & Planner"]
     types: [completed]
 
 jobs:
-  build_apk:
+  forge:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # Dummy 123 values for Keystore bypass
-      KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || '123' }}
-      KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || '123' }}
+      # 123 logic applied ONLY to passwords
+      KEY_PASS: "123"
+      KEY_ALIAS: "123"
 
     steps:
-      - name: 🚀 1. Checkout Branch
+      - name: 🚀 Checkout
         uses: actions/checkout@v4
 
-      - name: 🩹 2. Corrective Patch (Log-Based Repair)
+      - name: 🧬 Mutation: Self-Repair Environment
         run: |
-          echo "Log check: Resolving Aidl Execution Failure..."
+          echo "Detecting log-based failures... Resolving Aidl execution drift."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
-
-      - name: 🛰️ 3. SDK Nesting (Latest Standard)
-        run: |
+          
+          # Fix for modern Buildozer/SDK pathing
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q *.zip
-          mv cmdline-tools latest 
+          unzip -q *.zip && mv cmdline-tools latest
+          
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - name: 🛡️ 4. License & Binary Test
+      - name: 🛡️ License & Execution Test
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
-          # Crucial verification step:
+          # Direct verification of the Repair Mutation
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 5. Buildozer Execution
+      - name: 🧪 Buildozer Release Build
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: 📦 6. Upload NTRLI APK
+      - name: 📦 Final Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-DroidForge-Autonomous
+          name: NTRLI-Autonomous-Build
           path: bin/*.apk
