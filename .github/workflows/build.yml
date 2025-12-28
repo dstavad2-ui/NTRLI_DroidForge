@@ -10,7 +10,10 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # "123" input applied ONLY to passwords for bypass
+      # Admin AI API for Engine Logic
+      ADMIN_OPENAI: "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"
+      ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
+      # '123' Bypass logic for signing passwords
       KEY_PASS: "123"
       KEY_ALIAS: "123"
 
@@ -18,15 +21,16 @@ jobs:
       - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: 🧬 Mutation: Self-Repair Toolchain
+      - name: 🧬 Mutation Layer: Live Log Repair
         run: |
-          echo "Mutation starting: Fixing Aidl 32-bit execution drift..."
+          echo "Checking for execution drift... Injecting 32-bit architecture."
+          # Logic: Ubuntu 22.04 runners are 64-bit only. Aidl requires 32-bit libs.
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
           
-          # Establish 2025 SDK Nesting Standard
+          # Mutate SDK Structure to 2025 'Latest' Standards
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -35,22 +39,24 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Aidl Verification
+      - name: 🛡️ Environment Verification
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
-          # Final validation of the environmental mutation
-          $ANDROID_HOME/build-tools/33.0.2/aidl -version
+          # Autonomous Test: Verifying if Mutation solved the Aidl error
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
+          echo "✅ Toolchain Mutation Successful."
 
-      - name: 🧪 Buildozer Release Build
+      - name: 🧪 Buildozer Autonomous Build
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
+          # The build will use the Admin APIs defined in the env
           buildozer -v android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: 📦 Final APK Artifact
+      - name: 📦 Archive APK
         uses: actions/upload-artifact@v4
         with:
-          name: NTRLI-Autonomous-Build
+          name: NTRLI-DroidForge-Final
           path: bin/*.apk
