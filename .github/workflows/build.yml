@@ -15,7 +15,7 @@ jobs:
       BUILDOZER_BIN: /home/runner/.local/bin/buildozer
 
     steps:
-      - name: 🚀 1. Atomic Sync
+      - name: 🚀 1. Atomic Sync & Self-Heal
         uses: actions/checkout@v4
 
       - name: ☕ 2. Java 17 Sovereignty
@@ -29,7 +29,7 @@ jobs:
           pip3 install flake8
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: 🧬 4. God-Mode Environment Mutation
+      - name: 🧬 4. God-Mode Environment Mutation (AI-Generated Logic)
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
@@ -40,66 +40,70 @@ jobs:
           
           pip3 install --user --upgrade buildozer cython==0.29.33
           echo "/home/runner/.local/bin" >> $GITHUB_PATH
-          
-          if [ ! -f "buildozer.spec" ]; then /home/runner/.local/bin/buildozer init; fi
-          sed -i 's|^android.api = .*|android.api = 33|g' buildozer.spec
-          sed -i 's|^android.ndk = .*|android.ndk = 25b|g' buildozer.spec
-          sed -i 's|^requirements = .*|requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer|g' buildozer.spec
-          
-          git config --global user.name "NTRLI-GodBot"
-          git config --global user.email "bot@ntrli.ai"
-          git add buildozer.spec
-          git diff --staged --quiet || (git commit -m "🤖 God-Mode: Live Mutation" && git push origin main)
 
       - name: 🛰️ 5. SDK/NDK Manual Construction
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
+          # Clean start for directory nesting
+          rm -rf $ANDROID_HOME
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
-          unzip -q cmdline.zip -d $ANDROID_HOME/temp
-          # Fix for Step 6: Ensuring strict "latest" directory nesting
-          mv $ANDROID_HOME/temp/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          unzip -q cmdline.zip
+          cp -r cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
           
           curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
-          unzip -q ndk.zip -d ${{ github.workspace }}
-          mv ${{ github.workspace }}/android-ndk-r25b $ANDROID_NDK_HOME
+          unzip -q ndk.zip
+          mv android-ndk-r25b $ANDROID_NDK_HOME
 
-      - name: 🛡️ 6. Absolute Integrity Audit (FIXED)
+      - name: 🛡️ 6. Absolute Integrity Audit (LIVE LOG CORRECTION)
         run: |
-          # Use absolute path to bypass binary drift
-          SDK_MGR=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          chmod +x $SDK_MGR
-          yes | $SDK_MGR --licenses --sdk_root=$ANDROID_HOME
-          $SDK_MGR --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "platform-tools"
+          # FIX: Explicitly setting the SDK path in the manager environment
+          SDK_BIN=$ANDROID_HOME/cmdline-tools/latest/bin
+          chmod +x $SDK_BIN/sdkmanager
           
-          # Force link check
-          $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
+          # Accept licenses using the direct root flag to prevent "Permission Denied"
+          yes | $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME --licenses
+          
+          # Install specific build tools required by Kivy/Buildozer
+          $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools" \
+            "extras;android;m2repository"
+          
+          # Permission Handshake: Ensure the runner owns the entire toolchain
+          sudo chown -R runner:runner $ANDROID_HOME
+          
+          # Final Verification of Aidl Linkage
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
-      - name: 🧪 7. Path-Locked Execution
+      - name: 🧪 7. Path-Locked Execution (God-Mode)
         run: |
+          # Ensure Buildozer uses our verified SDK and not its own hidden cache
+          export PATH=$PATH:/home/runner/.local/bin:$ANDROID_HOME/platform-tools
           $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
+          BUILDOZER_NDK_PATH: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📊 8. Success Report & Fail-State Diagnostic (FIXED)
+      - name: 📊 8. Success Report & Fail-State Diagnostic
         if: always()
         run: |
-          echo "### 📱 NTRLI Build Intelligence" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 NTRLI God-Mode Intelligence" >> $GITHUB_STEP_SUMMARY
           if ls bin/*.apk 1> /dev/null 2>&1; then
             echo "✅ **STATUS: APK FORGED**" >> $GITHUB_STEP_SUMMARY
-            echo "- **Final Size:** $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **STATUS: BUILD FAILED**" >> $GITHUB_STEP_SUMMARY
-            echo "#### Log Snapshot (Last 30 lines):" >> $GITHUB_STEP_SUMMARY
             echo '```text' >> $GITHUB_STEP_SUMMARY
-            [ -f build_logs.txt ] && tail -n 30 build_logs.txt >> $GITHUB_STEP_SUMMARY || echo "No logs generated." >> $GITHUB_STEP_SUMMARY
+            [ -f build_logs.txt ] && tail -n 50 build_logs.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 📦 9. Production Release
+      - name: 📦 9. Production Release (Deterministic)
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
+          tag_name: release-${{ github.run_id }}
           files: bin/*.apk
           token: ${{ github.token }}
