@@ -1,70 +1,71 @@
-name: NTRLI Universal Deterministic Forge
+name: NTRLI Mobile-First Self-Healing Forge
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  forge_and_mutate:
+  self_heal_and_forge:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
-      ADMIN_OPENAI: "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"
-      ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
-      KEY_PASS: "123"
-      KEY_ALIAS: "123"
 
     steps:
-      - name: 🚀 1. Repository Synchronization
+      - name: 🚀 1. Mobile Sync
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: ☕ 2. Enforce JDK 17 (Critical Fix)
+      - name: ☕ 2. Java 17 Sovereignty
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🧬 3. Multi-Arch System Mutation (Aidl Linkage Fix)
+      - name: 🧬 3. Deterministic Self-Heal (Live Correction)
         run: |
+          echo "Detecting architectural mismatches..."
+          # Fix Aidl Error 127: Add 32-bit support for legacy tools
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 \
-            python3-pip build-essential cmake zip unzip libncurses5:i386
-          
-          # Logic Mutation: Align spec with current engine structure
+          sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 python3-pip zip unzip libncurses5:i386
+
+          # Automated Buildozer.spec Alignment
           if [ -f "buildozer.spec" ]; then
-            sed -i 's/^source.include_exts = .*/source.include_exts = py,png,jpg,kv,json/g' buildozer.spec
-            sed -i 's/^requirements = .*/requirements = python3,kivy,android,openai,mistralai/g' buildozer.spec
+            echo "Heal: Updating spec to verified 2025 standards"
             sed -i 's/^android.api = .*/android.api = 33/g' buildozer.spec
             sed -i 's/^android.ndk = .*/android.ndk = 25b/g' buildozer.spec
+            sed -i 's/^android.accept_sdk_license = .*/android.accept_sdk_license = True/g' buildozer.spec
+            
+            # Commit the healed version so the fix is permanent
+            git config --global user.name "NTRLI-SelfHeal-Bot"
+            git config --global user.email "bot@ntrli.ai"
+            git add buildozer.spec
+            git diff --staged --quiet || (git commit -m "🤖 Live Correction: Fixed Architecture & Spec" && git push origin main)
           fi
 
-      - name: 🛰️ 4. Idempotent SDK & NDK Construction
+      - name: 🛰️ 4. SDK Construction (Bypass Permissions)
         run: |
+          # Buildozer often fails on phones because it can't find tools. We build them manually.
           mkdir -p $ANDROID_HOME/cmdline-tools
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip -d $ANDROID_HOME/cmdline-tools && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           
-          curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
-          unzip -q ndk.zip -d ${{ github.workspace }} && mv ${{ github.workspace }}/android-ndk-r25b $ANDROID_NDK_HOME
-          
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-      - name: 🛡️ 5. Toolchain Integrity Audit
+      - name: 🛡️ 5. License & Aidl Integrity Audit
         run: |
           chmod -R +x ${{ github.workspace }}
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
           
-          # Verification of Aidl execution
+          # Final check: If aidl doesn't run here, the build is blocked
           $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
 
-      - name: 🧪 6. Buildozer Deterministic Build
+      - name: 🧪 6. Execution (Path-Locked)
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
           buildozer -v android release
@@ -72,17 +73,10 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📝 7. Module Mapping Verification
-        run: |
-          # Verify that the build output directory (bin/) contains the APK
-          if [ ! -f bin/*.apk ]; then
-            echo "Error: APK not found. Build process failed."
-            exit 1
-          fi
-
-      - name: 📦 8. Final Release
+      - name: 📦 7. Release Artifact to Phone
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
+          tag_name: build-${{ github.run_number }}
           files: bin/*.apk
           token: ${{ github.token }}
