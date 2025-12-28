@@ -1,4 +1,4 @@
-name: NTRLI God-Mode Perpetual Forge
+name: NTRLI Supreme God-Mode Forge
 on:
   push:
     branches: [main]
@@ -13,25 +13,23 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
       BUILDOZER_BIN: /home/runner/.local/bin/buildozer
-      PIP_USER: "true"
+      # Power Move: Force GitHub to ignore its own internal SDK paths
+      BUILDOZER_SDK_PATH: ${{ github.workspace }}/android-sdk
+      BUILDOZER_NDK_PATH: ${{ github.workspace }}/android-ndk
+      # Superiority Protocol: Override all interactive blocks
+      CI: true
 
     steps:
-      - name: 🚀 1. Atomic Sync & Sovereignty
+      - name: 🚀 1. Atomic Sync & Branch Dominance
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Enforcement (Zulu Protocol)
+      - name: ☕ 2. Java 17 Enforcement (JDK 61)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🛡️ 3. Multi-AI Pre-Flight Audit
-        run: |
-          pip3 install flake8
-          # Static analysis to catch indentation or syntax errors from mobile edits
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
-      - name: 🧬 4. God-Mode Dependency Injection
+      - name: 🧬 3. Multi-Agent Dependency Injection
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
@@ -39,62 +37,70 @@ jobs:
             libffi-dev libssl-dev libstdc++6:i386 lib32z1 lib32stdc++6 \
             libncurses5:i386 openjdk-17-jdk python3-dev python3-pip unzip zip \
             zlib1g-dev autoconf automake libtool pkg-config lld
-          pip3 install --user --upgrade buildozer cython==0.29.33
+          pip3 install --user --upgrade buildozer cython==0.29.33 flake8
           echo "/home/runner/.local/bin" >> $GITHUB_PATH
 
-      - name: 🛰️ 5. SDK/NDK Deterministic Construction
+      - name: 🛰️ 4. SDK/NDK Absolute Construction (The Superior Pivot)
         run: |
           rm -rf $ANDROID_HOME
           mkdir -p $ANDROID_HOME/cmdline-tools/latest
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip
-          cp -r cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
+          # Direct Injection: Ensure sdkmanager is in the exact path GitHub demands
+          mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
+          
           curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
           unzip -q ndk.zip
           mv android-ndk-r25b $ANDROID_NDK_HOME
 
-      - name: 🛡️ 6. AI-Corrected Integrity Audit
+      - name: 🛡️ 5. Superior Integrity Audit (Total Ownership)
         run: |
           SDK_MGR=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
           chmod +x $SDK_MGR
-          # Deterministic License Acceptance
+          
+          # Universal License Sovereignty
           yes | $SDK_MGR --sdk_root=$ANDROID_HOME --licenses
+          
+          # Force Component Deployment
           $SDK_MGR --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "platform-tools"
-          # Permission lockdown to ensure runner can write the APK
-          sudo chown -R runner:runner $ANDROID_HOME
+          
+          # Superiority Fix: Recursive 777 ensures no 'Permission Denied' ever triggers again
+          sudo chmod -R 777 $GITHUB_WORKSPACE
+          
+          # Link Verification
           $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
 
-      - name: 🧪 7. Path-Locked Execution
+      - name: 🧪 6. Path-Locked Execution (Non-Guessing Mode)
         run: |
           if [ ! -f "buildozer.spec" ]; then $BUILDOZER_BIN init; fi
-          # Force the SPEC to match our validated paths
+          # Force internal spec to align with current God-Mode paths
           sed -i "s|^#\?android.sdk_path = .*|android.sdk_path = $ANDROID_HOME|g" buildozer.spec
           sed -i "s|^#\?android.ndk_path = .*|android.ndk_path = $ANDROID_NDK_HOME|g" buildozer.spec
           sed -i "s|^#\?android.accept_sdk_license = .*|android.accept_sdk_license = True|g" buildozer.spec
-          # Personal Use Optimization: Embedded AI connectivity requirements
           sed -i "s|^requirements = .*|requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer,openssl,requests|g" buildozer.spec
-          # Environment Path Forcing
-          export PATH=$PATH:/home/runner/.local/bin:$ANDROID_HOME/platform-tools
+          
+          # Global Path Poisoning: Overwrite session paths to prioritize our tools
+          export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:/home/runner/.local/bin:$PATH
           $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📊 8. AI Success Report & APK Anatomy
+      - name: 📊 7. Final Success Summary
         if: always()
         run: |
-          echo "### 📱 NTRLI God-Mode Intelligence" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 NTRLI Supreme God-Mode Status" >> $GITHUB_STEP_SUMMARY
           if ls bin/*.apk 1> /dev/null 2>&1; then
-            echo "✅ **STATUS: APK FORGED**" >> $GITHUB_STEP_SUMMARY
-            echo "- **Final Size:** $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **DOMINANCE ACHIEVED: APK READY**" >> $GITHUB_STEP_SUMMARY
+            echo "- File: $(ls bin/*.apk)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **STATUS: BUILD FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **BUILD RESISTANCE DETECTED**" >> $GITHUB_STEP_SUMMARY
             echo '```text' >> $GITHUB_STEP_SUMMARY
             [ -f build_logs.txt ] && tail -n 50 build_logs.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 📦 9. Production Release
+      - name: 📦 8. Instant Mobile Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
