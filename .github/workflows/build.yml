@@ -9,22 +9,21 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-      packages: write
-      actions: write
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      # Explicitly mapping versions to prevent Buildozer drift
+      SDK_VERSION: "33"
+      BUILD_TOOLS_VERSION: "33.0.2"
       ADMIN_OPENAI: "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"
       ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
       KEY_PASS: "123"
       KEY_ALIAS: "123"
 
     steps:
-      - name: 🚀 1. Atomic Repository Sync
+      - name: 🚀 1. Sync Repository
         uses: actions/checkout@v4
-        with:
-          ref: main
 
-      - name: ☕ 2. Deterministic Java Setup (Fixes SDK Manager Error)
+      - name: ☕ 2. Deterministic Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -32,60 +31,59 @@ jobs:
 
       - name: 🧬 3. Multi-Arch System Mutation
         run: |
-          echo "Injecting 32-bit Compatibility Layer for Aidl..."
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
           
+          # Mutation: Force API 33 and requirements into buildozer.spec
           if [ -f "buildozer.spec" ]; then
+            sed -i "s/^android.api = .*/android.api = $SDK_VERSION/" buildozer.spec
+            sed -i "s/^android.sdk = .*/android.sdk = $SDK_VERSION/" buildozer.spec
+            sed -i "s/^android.build_tools_version = .*/android.build_tools_version = $BUILD_TOOLS_VERSION/" buildozer.spec
             sed -i 's/^requirements = .*/requirements = python3,kivy,android,openai,mistralai/g' buildozer.spec
-            sed -i 's/^android.api = .*/android.api = 33/g' buildozer.spec
-            sed -i 's/^android.sdk = .*/android.sdk = 33/g' buildozer.spec
-            sed -i 's/^android.minapi = .*/android.minapi = 21/g' buildozer.spec
           fi
 
-      - name: 🛰️ 4. Idempotent SDK Construction
+      - name: 🛰️ 4. Deterministic SDK Setup
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -sS -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q *.zip && mv cmdline-tools latest
-          rm *.zip
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
       - name: 🛡️ 5. Toolchain Validation (Pre-Flight)
         run: |
           chmod -R +x ${{ github.workspace }}
-          # Path corrected for direct execution
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_HOME
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME \
+            "platforms;android-$SDK_VERSION" "build-tools;$BUILD_TOOLS_VERSION"
           
-          # Verification: Aidl binary test
-          $ANDROID_HOME/build-tools/33.0.2/aidl -version
+          # Validate Aidl Linker
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aidl -version
 
-      - name: 🧪 6. Autonomous Build Execution
+      - name: 🧪 6. Buildozer Force-Path Execution
         run: |
           pip3 install --user --upgrade buildozer cython==0.29.33
-          buildozer -v android release
+          # Force buildozer to acknowledge our manual SDK
+          buildozer android release
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Overriding Buildozer auto-detection to use our validated paths
+          BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
 
-      - name: 📝 7. Branch Persistence
+      - name: 📝 7. Self-Healing Commit
         if: success()
         run: |
-          git config --global user.name "NTRLI-Autonomous-Bot"
+          git config --global user.name "NTRLI-Bot"
           git config --global user.email "bot@ntrli.ai"
           git add buildozer.spec
-          git diff --staged --quiet || (git commit -m "🤖 Deterministic Fix: JDK 17 & SDK Path" && git push origin main)
+          git diff --staged --quiet || (git commit -m "🤖 Fixed SDK/NDK Path Drift" && git push origin main)
 
-      - name: 📦 8. Release Artifact Deployment
+      - name: 📦 8. Release Artifact
         if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: NTRLI Production v${{ github.run_number }}
-          body: "Validated against SRE standards. Java 17 and Aidl Paradox resolved."
           files: bin/*.apk
-          token: ${{ github.token }}
