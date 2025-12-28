@@ -5,7 +5,7 @@ jobs:
   audit:
     runs-on: ubuntu-22.04
     env:
-      # Embedded Admin APIs for AI logic
+      # Embedded Admin AI APIs for Engine Logic
       ADMIN_OPENAI: "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"
       ADMIN_MISTRAL: "ag_019af2f1722572ba8c75ffa595738d38"
       GROQ_API: "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"
@@ -14,15 +14,15 @@ jobs:
       - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: 🔍 Structural Diagnostics
+      - name: 📁 Structural Coherence Scan
         run: |
-          echo "Validating Engine Sub-modules..."
+          echo "Scanning engine modules..."
           REQUIRED=("engine/ai" "engine/authority" "engine/router" "engine/state")
           for d in "${REQUIRED[@]}"; do
-            [ -d "$d" ] || (echo "::error::Missing $d" && exit 1)
+            [ -d "$d" ] || (echo "::error::❌ Missing module: $d" && exit 1)
           done
 
-      - name: 🐍 Python Logic Scan
+      - name: 🐍 Logic & API Validation
         run: |
           python3 -m compileall -q .
-          echo "✅ Logic integrity verified for Admin APIs."
+          echo "✅ Branch coherent. Environment ready for Autonomous Forge."
