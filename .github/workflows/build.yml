@@ -10,23 +10,23 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # 123 logic applied ONLY to passwords
+      # "123" input applied ONLY to passwords for bypass
       KEY_PASS: "123"
       KEY_ALIAS: "123"
 
     steps:
-      - name: 🚀 Checkout
+      - name: 🚀 Source Sync
         uses: actions/checkout@v4
 
-      - name: 🧬 Mutation: Self-Repair Environment
+      - name: 🧬 Mutation: Self-Repair Toolchain
         run: |
-          echo "Detecting log-based failures... Resolving Aidl execution drift."
+          echo "Mutation starting: Fixing Aidl 32-bit execution drift..."
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y libstdc++6:i386 lib32z1 lib32stdc++6 \
             python3-pip build-essential cmake zip unzip libncurses5:i386
           
-          # Fix for modern Buildozer/SDK pathing
+          # Establish 2025 SDK Nesting Standard
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -35,11 +35,11 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - name: 🛡️ License & Execution Test
+      - name: 🛡️ License & Aidl Verification
         run: |
           yes | sdkmanager --licenses --sdk_root=$ANDROID_HOME
           sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2"
-          # Direct verification of the Repair Mutation
+          # Final validation of the environmental mutation
           $ANDROID_HOME/build-tools/33.0.2/aidl -version
 
       - name: 🧪 Buildozer Release Build
@@ -49,7 +49,7 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: 📦 Final Artifact
+      - name: 📦 Final APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: NTRLI-Autonomous-Build
