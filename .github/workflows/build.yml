@@ -13,24 +13,25 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk
       BUILDOZER_BIN: /home/runner/.local/bin/buildozer
+      PIP_USER: "true"
 
     steps:
-      - name: 🚀 1. Atomic Sync
+      - name: 🚀 1. Atomic Sync & Sovereignty
         uses: actions/checkout@v4
 
-      - name: ☕ 2. Java 17 Enforcement
+      - name: ☕ 2. Java 17 Enforcement (Zulu Protocol)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 🛡️ 3. Pre-Flight Syntax Shield
+      - name: 🛡️ 3. Multi-AI Pre-Flight Audit
         run: |
           pip3 install flake8
-          # Halt on critical syntax errors immediately
+          # Static analysis to catch indentation or syntax errors from mobile edits
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: 🧬 4. God-Mode Environment Mutation
+      - name: 🧬 4. God-Mode Dependency Injection
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
@@ -38,61 +39,54 @@ jobs:
             libffi-dev libssl-dev libstdc++6:i386 lib32z1 lib32stdc++6 \
             libncurses5:i386 openjdk-17-jdk python3-dev python3-pip unzip zip \
             zlib1g-dev autoconf automake libtool pkg-config lld
-          
           pip3 install --user --upgrade buildozer cython==0.29.33
           echo "/home/runner/.local/bin" >> $GITHUB_PATH
 
-      - name: 🛰️ 5. SDK/NDK Manual Construction
+      - name: 🛰️ 5. SDK/NDK Deterministic Construction
         run: |
           rm -rf $ANDROID_HOME
           mkdir -p $ANDROID_HOME/cmdline-tools/latest
           curl -sS -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
           unzip -q cmdline.zip
           cp -r cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-          
           curl -sS -L https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -o ndk.zip
           unzip -q ndk.zip
           mv android-ndk-r25b $ANDROID_NDK_HOME
 
-      - name: 🛡️ 6. Absolute Integrity Audit (Logic Fix for 59021050937)
+      - name: 🛡️ 6. AI-Corrected Integrity Audit
         run: |
-          SDK_BIN=$ANDROID_HOME/cmdline-tools/latest/bin
-          chmod +x $SDK_BIN/sdkmanager
-          
-          # Force License Acceptance with explicit root to prevent permission drift
-          yes | $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME --licenses
-          
-          # Install toolchain components
-          $SDK_BIN/sdkmanager --sdk_root=$ANDROID_HOME \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "platform-tools" \
-            "extras;android;m2repository"
-          
-          # Hard ownership reset to prevent Step 7 "Permission Denied"
+          SDK_MGR=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          chmod +x $SDK_MGR
+          # Deterministic License Acceptance
+          yes | $SDK_MGR --sdk_root=$ANDROID_HOME --licenses
+          $SDK_MGR --sdk_root=$ANDROID_HOME "platforms;android-33" "build-tools;33.0.2" "platform-tools"
+          # Permission lockdown to ensure runner can write the APK
           sudo chown -R runner:runner $ANDROID_HOME
-          
-          # Aidl check
-          $ANDROID_HOME/build-tools/33.0.2/aidl -version
+          $ANDROID_HOME/build-tools/33.0.2/aidl -version || exit 1
 
-      - name: 🧪 7. Path-Locked Execution (God-Mode)
+      - name: 🧪 7. Path-Locked Execution
         run: |
-          # Inject validated paths into session
+          if [ ! -f "buildozer.spec" ]; then $BUILDOZER_BIN init; fi
+          # Force the SPEC to match our validated paths
+          sed -i "s|^#\?android.sdk_path = .*|android.sdk_path = $ANDROID_HOME|g" buildozer.spec
+          sed -i "s|^#\?android.ndk_path = .*|android.ndk_path = $ANDROID_NDK_HOME|g" buildozer.spec
+          sed -i "s|^#\?android.accept_sdk_license = .*|android.accept_sdk_license = True|g" buildozer.spec
+          # Personal Use Optimization: Embedded AI connectivity requirements
+          sed -i "s|^requirements = .*|requirements = python3,kivy,android,openai,mistralai,urllib3==1.26.15,certifi,charset-normalizer,openssl,requests|g" buildozer.spec
+          # Environment Path Forcing
           export PATH=$PATH:/home/runner/.local/bin:$ANDROID_HOME/platform-tools
           $BUILDOZER_BIN -v android release 2>&1 | tee build_logs.txt
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
-          BUILDOZER_SDK_PATH: ${{ env.ANDROID_HOME }}
-          BUILDOZER_NDK_PATH: ${{ env.ANDROID_NDK_HOME }}
 
-      - name: 📊 8. Success Report & Diagnostic
+      - name: 📊 8. AI Success Report & APK Anatomy
         if: always()
         run: |
-          echo "### 📱 NTRLI Build Intelligence" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 NTRLI God-Mode Intelligence" >> $GITHUB_STEP_SUMMARY
           if ls bin/*.apk 1> /dev/null 2>&1; then
             echo "✅ **STATUS: APK FORGED**" >> $GITHUB_STEP_SUMMARY
-            echo "- Size: $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Final Size:** $(du -sh bin/*.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **STATUS: BUILD FAILED**" >> $GITHUB_STEP_SUMMARY
             echo '```text' >> $GITHUB_STEP_SUMMARY
